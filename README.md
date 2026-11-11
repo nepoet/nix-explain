@@ -241,6 +241,12 @@ scripts/e2e.sh ./nix-explain
   resolves to the previous stable release. Pin the version, or use the
   installer.
 
+## Project status
+
+See [CHANGELOG.md](CHANGELOG.md) for release notes and
+[docs/STATUS.md](docs/STATUS.md) for the current state, decisions and known
+limitations.
+
 ## License
 
 MIT
