@@ -22,6 +22,10 @@ type Strings struct {
 	NoMatchIssue string
 	HiddenOne    string
 	HiddenMany   string
+	Hint         string
+	PastePrompt  string
+	NoLastError  string
+	ClipboardErr string
 	Usage        string
 	Categories   map[string]string
 }
@@ -73,6 +77,10 @@ var english = Strings{
 	NoMatchIssue: "If this is a common error, please open an issue with the output:",
 	HiddenOne:    "(%d frame from nixpkgs hidden — use --show-all to see it)",
 	HiddenMany:   "(%d frames from nixpkgs hidden — use --show-all to see them)",
+	Hint:         "hint: run `nix-explain` to explain this error",
+	PastePrompt:  "Paste the error output, then press Ctrl+D:",
+	NoLastError:  "No recent error captured for this terminal.",
+	ClipboardErr: "Could not read the clipboard (install wl-clipboard or xclip).",
 	Categories: map[string]string{
 		"eval":     "EVAL",
 		"modules":  "MODULES",
@@ -103,6 +111,10 @@ var russian = Strings{
 	NoMatchIssue: "Если ошибка распространённая, откройте issue с этим выводом:",
 	HiddenOne:    "(%d кадр(ов) из nixpkgs скрыто — используйте --show-all)",
 	HiddenMany:   "(%d кадр(ов) из nixpkgs скрыто — используйте --show-all)",
+	Hint:         "подсказка: выполните `nix-explain`, чтобы объяснить ошибку",
+	PastePrompt:  "Вставьте вывод ошибки, затем нажмите Ctrl+D:",
+	NoLastError:  "В этом терминале свежих ошибок не найдено.",
+	ClipboardErr: "Не удалось прочитать буфер обмена (нужен wl-clipboard или xclip).",
 	Categories: map[string]string{
 		"eval":     "ВЫЧИСЛЕНИЕ",
 		"modules":  "МОДУЛИ",
@@ -132,6 +144,8 @@ Flags:
   --color MODE    auto, always or never (default auto)
   --width N       wrap text to N columns (default 72)
   --show-all      keep nixpkgs frames in the trace
+  --last          explain the last error captured for this terminal
+  --clipboard     explain the text in the clipboard
 
 Exit codes (explain): 0 matched, 2 not recognised.
 Exit codes (run): the exit code of CMD.
@@ -157,6 +171,8 @@ const usageRU = `nix-explain — объясняет ошибки Nix, офлай
   --color РЕЖИМ   auto, always, never (по умолчанию auto)
   --width N       переносить текст по N колонкам (по умолчанию 72)
   --show-all      не скрывать кадры из nixpkgs
+  --last          объяснить последнюю ошибку этого терминала
+  --clipboard     объяснить текст из буфера обмена
 
 Коды возврата (explain): 0 — ошибка распознана, 2 — нет.
 Коды возврата (run): код завершения КОМАНДЫ.

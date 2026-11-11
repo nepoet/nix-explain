@@ -42,12 +42,44 @@ assistant. `nix-explain` does the two useful things locally:
 
 It never sends your code or logs anywhere.
 
-## Install
+## Quick start
 
-With Go:
+One line, no Go or Nix toolchain required:
 
 ```sh
-go install github.com/nepoet/nix-explain@latest
+curl -fsSL https://raw.githubusercontent.com/nepoet/nix-explain/main/install.sh | sh
+```
+
+Then break something and type:
+
+```sh
+nix build .#foo
+# ... the error appears ...
+nix-explain
+```
+
+The installer puts the binary in `~/.local/bin`, installs wrappers for `nix`,
+`nixos-rebuild`, `home-manager`, `nix-shell` and `nix-build`, and prints how
+to add the directory to `PATH` if needed.
+
+## How the "just works" part works
+
+The wrappers save the error output of the last command **per terminal** in
+`$XDG_RUNTIME_DIR/nix-explain/`. A bare `nix-explain` reads that capture and
+explains it — no copying, no pipes.
+
+Nothing is hidden or rewritten: you still see Nix's real output, plus a
+one-line hint. If there is no capture, `nix-explain` offers to paste an error
+(`Ctrl+D` to finish); `--clipboard` reads the clipboard instead.
+
+## Install
+
+One-line installer (above), or:
+
+With Go (the hotfix is a prerelease, so pin it):
+
+```sh
+go install github.com/nepoet/nix-explain@v0.2.3-hotfix
 ```
 
 With Nix (flakes):
@@ -67,16 +99,25 @@ go build -o nix-explain .
 nix build .# && ./result/bin/nix-explain --version
 ```
 
+Installer options: `--prefix DIR`, `--system` (wrappers in `/usr/local/bin`,
+needs sudo, for `sudo nixos-rebuild`), `--no-shims`, `--uninstall`.
+
 ## Usage
 
 ```sh
+# after any failing nix command, with wrappers installed
+nix-explain
+
+# the same, explicitly
+nix-explain --last
+
+# explain whatever is in the clipboard
+nix-explain --clipboard
+
 # pipe an error into it
 nix build .#foo 2>&1 | nix-explain
 
-# same in Russian (or set NIX_EXPLAIN_LANG=ru / LANG=ru_RU.UTF-8)
-nix build .#foo 2>&1 | nix-explain --lang ru
-
-# or let it run the command (exit code is preserved, output is streamed)
+# run a command and explain its failure (raw output is kept)
 nix-explain run -- nixos-rebuild switch
 
 # explain a message you already have
@@ -85,16 +126,17 @@ nix-explain "error: infinite recursion encountered"
 # narrow terminal (or a vertical screen recording)
 nix-explain --width 44 < error.log
 
-# machine readable
+# machine readable, and the rule list
 nix-explain --json < error.log
-
-# browse the knowledge base
 nix-explain list
-nix-explain list flake
 ```
+
+Flags may appear before or after the file argument.
 
 Exit codes: `0` when the output was explained, `2` when nothing matched.
 In `run` mode the exit code of the wrapped command is returned unchanged.
+
+To turn the wrappers off for one command: `NIX_EXPLAIN=0 nix build ...`.
 
 ## How it works
 
@@ -186,6 +228,16 @@ scripts/e2e.sh ./nix-explain
   `nix log` and `nix-output-monitor`.
 - Russian translations are maintained by hand; a missing translation falls
   back to English silently (the test suite keeps them in sync).
+- Wrappers only see commands started through them and only save output for
+  30 minutes. Absolute paths (`/usr/bin/nix`) bypass them, and `sudo` needs
+  `--system` (or `nix-explain run -- sudo ...`).
+- Commands whose stderr is not a terminal (scripts, CI) still run normally
+  but are not captured. This is deliberate: no surprises in automation.
+- A terminal's scrollback is not readable by portable means; the capture is
+  written at the moment the command fails, not scraped afterwards.
+- `v0.2.3-hotfix` is a semver prerelease, so `go install ...@latest` still
+  resolves to the previous stable release. Pin the version, or use the
+  installer.
 
 ## License
 

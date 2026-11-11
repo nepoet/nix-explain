@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/nepoet/nix-explain/internal/kb"
+	"github.com/nepoet/nix-explain/internal/state"
 )
 
 func TestMain(m *testing.M) {
@@ -201,5 +203,69 @@ func TestRussianList(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "ВЫЧИСЛЕНИЕ") {
 		t.Fatalf("category was not translated:\n%s", out.String())
+	}
+}
+
+func TestSplitFlags(t *testing.T) {
+	flags, pos := splitFlags([]string{"err.log", "--color", "never", "--json", "error: boom", "--last"})
+	wantFlags := []string{"--color", "never", "--json", "--last"}
+	wantPos := []string{"err.log", "error: boom"}
+	if strings.Join(flags, " ") != strings.Join(wantFlags, " ") {
+		t.Fatalf("flags = %q, want %q", flags, wantFlags)
+	}
+	if strings.Join(pos, " ") != strings.Join(wantPos, " ") {
+		t.Fatalf("positional = %q, want %q", pos, wantPos)
+	}
+}
+
+func TestSplitFlagsTreatsUnknownFlagsAsText(t *testing.T) {
+	_, pos := splitFlags([]string{"error: run with --show-trace"})
+	if len(pos) != 1 || pos[0] != "error: run with --show-trace" {
+		t.Fatalf("positional = %q", pos)
+	}
+}
+
+func TestFlagsAfterFileArgument(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "err.log")
+	if err := os.WriteFile(path, []byte(sample), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errOut bytes.Buffer
+	code := Run([]string{path, "--color", "never", "--lang", "en"}, strings.NewReader(""), &out, &errOut, testRules(), nil, "test")
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0; stderr=%s", code, errOut.String())
+	}
+	if !strings.Contains(out.String(), "Infinite recursion") {
+		t.Fatalf("unexpected output:\n%s", out.String())
+	}
+}
+
+func TestLastCapturedError(t *testing.T) {
+	t.Setenv("NIX_EXPLAIN_STATE_DIR", t.TempDir())
+	if err := state.Save(sample); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errOut bytes.Buffer
+	code := Run([]string{"--last", "--lang", "en"}, strings.NewReader(""), &out, &errOut, testRules(), nil, "test")
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0; stderr=%s", code, errOut.String())
+	}
+	if !strings.Contains(out.String(), "Infinite recursion") {
+		t.Fatalf("unexpected output:\n%s", out.String())
+	}
+}
+
+func TestLastWithoutCapture(t *testing.T) {
+	t.Setenv("NIX_EXPLAIN_STATE_DIR", t.TempDir())
+	var out, errOut bytes.Buffer
+	code := Run([]string{"--last", "--lang", "en"}, strings.NewReader(""), &out, &errOut, testRules(), nil, "test")
+	if code != 2 {
+		t.Fatalf("exit = %d, want 2", code)
+	}
+	if !strings.Contains(errOut.String(), "No recent error") {
+		t.Fatalf("unexpected stderr:\n%s", errOut.String())
 	}
 }

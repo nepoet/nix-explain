@@ -138,6 +138,26 @@ else
 	no "run mode" "exit=$rc, stderr did not contain the explanation"
 fi
 
+echo "== shim capture =="
+mkdir -p shim/bin shim/real run
+ln -sf "$BIN" shim/bin/nix
+cat > shim/real/nix <<'SH'
+#!/bin/sh
+echo "error: infinite recursion encountered" >&2
+echo "       at /tmp/rec.nix:2:7:" >&2
+exit 1
+SH
+chmod +x shim/real/nix
+XDG_RUNTIME_DIR="$WORK/run" PATH="$WORK/shim/bin:$WORK/shim/real:/usr/bin:/bin" \
+	"$WORK/shim/bin/nix" build >/dev/null 2>&1 || true
+got=$(XDG_RUNTIME_DIR="$WORK/run" "$BIN" --last --json 2>/dev/null |
+	sed -n 's/^ *"id": "\([^"]*\)".*/\1/p' | head -1)
+if [ "$got" = "eval-infinite-recursion" ]; then
+	ok "shim capture + bare nix-explain"
+else
+	no "shim capture" "matched '${got:-<none>}'"
+fi
+
 echo "== translations =="
 nix eval --file missing-attr.nix 2>&1 | "$BIN" --lang ru --color never >ru.out 2>&1
 if grep -q "ПРИЧИНА" ru.out && grep -q "ИСПРАВЛЕНИЕ" ru.out; then

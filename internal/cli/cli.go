@@ -12,8 +12,10 @@ import (
 	"strings"
 
 	"github.com/nepoet/nix-explain/internal/i18n"
+	"github.com/nepoet/nix-explain/internal/istty"
 	"github.com/nepoet/nix-explain/internal/kb"
 	"github.com/nepoet/nix-explain/internal/render"
+	"github.com/nepoet/nix-explain/internal/state"
 	"github.com/nepoet/nix-explain/internal/trace"
 )
 
@@ -22,11 +24,13 @@ import (
 const maxCaptureBytes = 8 << 20
 
 type options struct {
-	json    bool
-	color   string
-	showAll bool
-	lang    string
-	width   int
+	json      bool
+	color     string
+	showAll   bool
+	lang      string
+	width     int
+	last      bool
+	clipboard bool
 }
 
 // Run dispatches to a subcommand and returns the process exit code.
@@ -56,6 +60,8 @@ func newFlagSet(name string, stderr io.Writer, opts *options) *flag.FlagSet {
 	fs.StringVar(&opts.lang, "lang", "auto", "output language: en, ru, auto")
 	fs.IntVar(&opts.width, "width", 0, "wrap text to this many columns (default 72)")
 	fs.BoolVar(&opts.showAll, "show-all", false, "keep nixpkgs frames in the trace")
+	fs.BoolVar(&opts.last, "last", false, "explain the last error captured for this terminal")
+	fs.BoolVar(&opts.clipboard, "clipboard", false, "explain the text in the clipboard")
 	fs.Usage = func() {
 		fmt.Fprint(stderr, i18n.Get(i18n.Resolve(opts.lang)).Usage)
 	}
@@ -75,44 +81,156 @@ func localize(rules []kb.Rule, translations map[string]kb.Translation, lang stri
 func explainCommand(args []string, stdin io.Reader, stdout, stderr io.Writer, rules []kb.Rule, translations map[string]kb.Translation) int {
 	var opts options
 	fs := newFlagSet("nix-explain", stderr, &opts)
-	if err := fs.Parse(args); err != nil {
+	flagArgs, rest := splitFlags(args)
+	if err := fs.Parse(flagArgs); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
 		}
 		return 2
 	}
 
-	rest := fs.Args()
-	if len(rest) == 0 && isTerminal(stdin) {
-		// Nothing to explain and no piped input: do not wait forever.
-		fmt.Fprint(stderr, i18n.Get(i18n.Resolve(opts.lang)).Usage)
-		return 2
+	strs := i18n.Get(i18n.Resolve(opts.lang))
+
+	switch {
+	case opts.clipboard:
+		text, err := readClipboard()
+		if err != nil {
+			fmt.Fprintln(stderr, strs.ClipboardErr)
+			return 2
+		}
+		return explain(text, stdout, rules, translations, opts)
+
+	case opts.last && len(rest) == 0:
+		text, err := state.Load()
+		if err != nil {
+			fmt.Fprintln(stderr, strs.NoLastError)
+			return 2
+		}
+		return explain(text, stdout, rules, translations, opts)
 	}
 
-	text, err := readInput(rest, stdin)
+	if len(rest) > 0 {
+		text, err := readInput(rest, stdin)
+		if err != nil {
+			fmt.Fprintf(stderr, "nix-explain: %v\n", err)
+			return 2
+		}
+		if strings.TrimSpace(text) == "" {
+			fmt.Fprint(stderr, strs.Usage)
+			return 2
+		}
+		return explain(text, stdout, rules, translations, opts)
+	}
+
+	// No arguments. Piped input keeps working exactly as before.
+	if !isTerminal(stdin) {
+		raw, err := io.ReadAll(stdin)
+		if err != nil {
+			fmt.Fprintf(stderr, "nix-explain: %v\n", err)
+			return 2
+		}
+		text := string(raw)
+		if strings.TrimSpace(text) == "" {
+			fmt.Fprint(stderr, strs.Usage)
+			return 2
+		}
+		return explain(text, stdout, rules, translations, opts)
+	}
+
+	// On a terminal: explain what the shim captured for this terminal, else
+	// ask the user to paste it.
+	if text, err := state.Load(); err == nil {
+		return explain(text, stdout, rules, translations, opts)
+	}
+
+	fmt.Fprintln(stderr, strs.PastePrompt)
+	raw, err := io.ReadAll(stdin)
 	if err != nil {
 		fmt.Fprintf(stderr, "nix-explain: %v\n", err)
 		return 2
 	}
+	text := string(raw)
 	if strings.TrimSpace(text) == "" {
-		fmt.Fprint(stderr, i18n.Get(i18n.Resolve(opts.lang)).Usage)
+		fmt.Fprint(stderr, strs.Usage)
 		return 2
 	}
 	return explain(text, stdout, rules, translations, opts)
 }
 
-// isTerminal reports whether r is an interactive terminal. It is used to avoid
-// blocking on stdin when the command is invoked without arguments.
+// splitFlags moves known flags in front of positional arguments, so both
+// `nix-explain err.log --color never` and `nix-explain --color never err.log`
+// work. Unknown flags are treated as text: error output often contains them.
+func splitFlags(args []string) (flagArgs, positional []string) {
+	boolFlags := map[string]bool{
+		"json": true, "show-all": true, "last": true, "clipboard": true,
+	}
+	valueFlags := map[string]bool{
+		"color": true, "lang": true, "width": true,
+	}
+
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" {
+			positional = append(positional, args[i+1:]...)
+			break
+		}
+		if !strings.HasPrefix(a, "--") {
+			positional = append(positional, a)
+			continue
+		}
+		name := strings.TrimPrefix(a, "--")
+		if eq := strings.IndexByte(name, '='); eq >= 0 {
+			if boolFlags[name[:eq]] || valueFlags[name[:eq]] {
+				flagArgs = append(flagArgs, a)
+				continue
+			}
+			positional = append(positional, a)
+			continue
+		}
+		switch {
+		case boolFlags[name]:
+			flagArgs = append(flagArgs, a)
+		case valueFlags[name] && i+1 < len(args):
+			flagArgs = append(flagArgs, a, args[i+1])
+			i++
+		default:
+			positional = append(positional, a)
+		}
+	}
+	return flagArgs, positional
+}
+
+// readClipboard returns the text in the system clipboard, if a supported
+// clipboard tool is installed.
+func readClipboard() (string, error) {
+	candidates := [][]string{
+		{"wl-paste", "--no-newline"},
+		{"xclip", "-selection", "clipboard", "-o"},
+		{"xsel", "--clipboard", "--output"},
+		{"pbpaste"},
+	}
+	for _, c := range candidates {
+		if _, err := exec.LookPath(c[0]); err != nil {
+			continue
+		}
+		out, err := exec.Command(c[0], c[1:]...).Output()
+		if err != nil {
+			continue
+		}
+		if text := strings.TrimSpace(string(out)); text != "" {
+			return text, nil
+		}
+	}
+	return "", errors.New("no clipboard tool available")
+}
+
+// isTerminal reports whether r is an interactive terminal.
 func isTerminal(r io.Reader) bool {
 	f, ok := r.(*os.File)
 	if !ok {
 		return false
 	}
-	fi, err := f.Stat()
-	if err != nil {
-		return false
-	}
-	return fi.Mode()&os.ModeCharDevice != 0
+	return istty.Is(f.Fd())
 }
 
 func readInput(args []string, stdin io.Reader) (string, error) {
@@ -178,7 +296,13 @@ func runCommand(args []string, stdin io.Reader, stdout, stderr io.Writer, rules 
 	flagArgs, cmdArgs := splitOnDashDash(args)
 
 	fs := newFlagSet("nix-explain run", stderr, &opts)
-	if err := fs.Parse(flagArgs); err != nil {
+	pre, extra := splitFlags(flagArgs)
+	if len(extra) > 0 {
+		fmt.Fprint(stderr, "nix-explain run: put the command after --\n\n")
+		fmt.Fprint(stderr, i18n.Get(i18n.Resolve(opts.lang)).Usage)
+		return 2
+	}
+	if err := fs.Parse(pre); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
 		}
@@ -209,13 +333,18 @@ func runCommand(args []string, stdin io.Reader, stdout, stderr io.Writer, rules 
 		}
 	}
 
+	text := captured.String()
+	if strings.TrimSpace(text) != "" {
+		_ = state.Save(text)
+	}
+
 	// In run mode the explanation goes to stderr so that stdout stays a
 	// faithful copy of the command's own output.
 	explainTo := stderr
 	if opts.json {
 		explainTo = stdout
 	}
-	explainCaptured(captured.String(), explainTo, rules, translations, opts)
+	explainCaptured(text, explainTo, rules, translations, opts)
 	return code
 }
 
@@ -263,14 +392,15 @@ func listCommand(args []string, stdout, stderr io.Writer, rules []kb.Rule, trans
 	fs.Usage = func() {
 		fmt.Fprint(stderr, i18n.Get(i18n.Resolve(opts.lang)).Usage)
 	}
-	if err := fs.Parse(args); err != nil {
+	flagArgs, queryArgs := splitFlags(args)
+	if err := fs.Parse(flagArgs); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
 		}
 		return 2
 	}
 
-	query := strings.Join(fs.Args(), " ")
+	query := strings.Join(queryArgs, " ")
 	rules, strs := localize(rules, translations, opts.lang)
 	selected := kb.Filter(rules, query)
 

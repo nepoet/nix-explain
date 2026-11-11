@@ -5,10 +5,12 @@ package main
 import (
 	"embed"
 	"os"
+	"path/filepath"
 	"runtime/debug"
 
 	"github.com/nepoet/nix-explain/internal/cli"
 	"github.com/nepoet/nix-explain/internal/kb"
+	"github.com/nepoet/nix-explain/internal/shim"
 )
 
 //go:embed rules i18n
@@ -20,6 +22,10 @@ var assets embed.FS
 var version = "dev"
 
 func main() {
+	if shim.IsShim(os.Args[0]) {
+		os.Exit(shim.Run(filepath.Base(os.Args[0]), os.Args[1:]))
+	}
+
 	if version == "dev" {
 		// When installed with `go install module@version` there is no
 		// ldflags override, but the build info still knows the version.
