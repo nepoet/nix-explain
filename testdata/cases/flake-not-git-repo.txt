@@ -1,0 +1,1 @@
+error: '/home/user/proj' is not a git repository

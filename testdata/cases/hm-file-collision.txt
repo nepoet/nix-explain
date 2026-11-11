@@ -1,0 +1,1 @@
+error: Existing file '/home/user/.config/foo/config' is in the way of '/nix/store/dddddddddddddddddddddddddddddddd-home-manager-files/.config/foo/config'

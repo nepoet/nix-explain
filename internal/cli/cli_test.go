@@ -3,11 +3,21 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/nepoet/nix-explain/internal/kb"
 )
+
+func TestMain(m *testing.M) {
+	// Keep the default-language tests deterministic on a localised system.
+	os.Setenv("LANG", "en_US.UTF-8")
+	os.Unsetenv("LC_ALL")
+	os.Unsetenv("LC_MESSAGES")
+	os.Unsetenv("NIX_EXPLAIN_LANG")
+	os.Exit(m.Run())
+}
 
 func testRules() []kb.Rule {
 	return []kb.Rule{{
@@ -29,7 +39,7 @@ const sample = `error: infinite recursion encountered
 
 func TestExplainMatchesAndReportsLocation(t *testing.T) {
 	var out, errOut bytes.Buffer
-	code := Run(nil, strings.NewReader(sample), &out, &errOut, testRules(), "test")
+	code := Run(nil, strings.NewReader(sample), &out, &errOut, testRules(), nil, "test")
 	if code != 0 {
 		t.Fatalf("exit = %d, want 0; stderr=%s", code, errOut.String())
 	}
@@ -42,7 +52,7 @@ func TestExplainMatchesAndReportsLocation(t *testing.T) {
 
 func TestExplainJSON(t *testing.T) {
 	var out, errOut bytes.Buffer
-	code := Run([]string{"--json"}, strings.NewReader(sample), &out, &errOut, testRules(), "test")
+	code := Run([]string{"--json"}, strings.NewReader(sample), &out, &errOut, testRules(), nil, "test")
 	if code != 0 {
 		t.Fatalf("exit = %d, want 0", code)
 	}
@@ -67,7 +77,7 @@ func TestExplainJSON(t *testing.T) {
 
 func TestExplainNoMatch(t *testing.T) {
 	var out, errOut bytes.Buffer
-	code := Run(nil, strings.NewReader("everything is fine"), &out, &errOut, testRules(), "test")
+	code := Run(nil, strings.NewReader("everything is fine"), &out, &errOut, testRules(), nil, "test")
 	if code != 2 {
 		t.Fatalf("exit = %d, want 2", code)
 	}
@@ -80,7 +90,7 @@ func TestRunPreservesExitCodeAndExplains(t *testing.T) {
 	var out, errOut bytes.Buffer
 	code := Run([]string{"run", "--color", "never", "--", "sh", "-c",
 		`echo "error: infinite recursion encountered"; echo "at /home/user/a.nix:1:2:" >&2; exit 3`},
-		strings.NewReader(""), &out, &errOut, testRules(), "test")
+		strings.NewReader(""), &out, &errOut, testRules(), nil, "test")
 	if code != 3 {
 		t.Fatalf("exit = %d, want 3", code)
 	}
@@ -94,7 +104,7 @@ func TestRunPreservesExitCodeAndExplains(t *testing.T) {
 
 func TestList(t *testing.T) {
 	var out, errOut bytes.Buffer
-	if code := Run([]string{"list"}, strings.NewReader(""), &out, &errOut, testRules(), "test"); code != 0 {
+	if code := Run([]string{"list"}, strings.NewReader(""), &out, &errOut, testRules(), nil, "test"); code != 0 {
 		t.Fatalf("exit = %d, want 0", code)
 	}
 	if !strings.Contains(out.String(), "eval-infinite-recursion") {
@@ -104,7 +114,7 @@ func TestList(t *testing.T) {
 
 func TestListFilter(t *testing.T) {
 	var out, errOut bytes.Buffer
-	if code := Run([]string{"list", "recursion"}, strings.NewReader(""), &out, &errOut, testRules(), "test"); code != 0 {
+	if code := Run([]string{"list", "recursion"}, strings.NewReader(""), &out, &errOut, testRules(), nil, "test"); code != 0 {
 		t.Fatalf("exit = %d, want 0", code)
 	}
 	if !strings.Contains(out.String(), "eval-infinite-recursion") {
@@ -114,7 +124,7 @@ func TestListFilter(t *testing.T) {
 
 func TestDashReadsStdin(t *testing.T) {
 	var out, errOut bytes.Buffer
-	if code := Run([]string{"-"}, strings.NewReader(sample), &out, &errOut, testRules(), "test"); code != 0 {
+	if code := Run([]string{"-"}, strings.NewReader(sample), &out, &errOut, testRules(), nil, "test"); code != 0 {
 		t.Fatalf("exit = %d, want 0", code)
 	}
 	if !strings.Contains(out.String(), "Infinite recursion") {
@@ -124,10 +134,72 @@ func TestDashReadsStdin(t *testing.T) {
 
 func TestEmptyInputShowsUsage(t *testing.T) {
 	var out, errOut bytes.Buffer
-	if code := Run(nil, strings.NewReader(""), &out, &errOut, testRules(), "test"); code != 2 {
+	if code := Run(nil, strings.NewReader(""), &out, &errOut, testRules(), nil, "test"); code != 2 {
 		t.Fatalf("exit = %d, want 2", code)
 	}
 	if !strings.Contains(errOut.String(), "Usage:") {
 		t.Fatalf("usage not printed:\n%s", errOut.String())
+	}
+}
+
+func ruTranslations() map[string]kb.Translation {
+	return map[string]kb.Translation{
+		"eval-infinite-recursion": {
+			ID:    "eval-infinite-recursion",
+			Title: "Бесконечная рекурсия при вычислении",
+			Cause: "Nix вычисляет значение через само себя.",
+			Fix:   "Разорвите цикл в определении.",
+		},
+	}
+}
+
+func TestRussianOutput(t *testing.T) {
+	var out, errOut bytes.Buffer
+	code := Run([]string{"--lang", "ru"}, strings.NewReader(sample), &out, &errOut, testRules(), ruTranslations(), "test")
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	for _, want := range []string{"Бесконечная рекурсия", "ПРИЧИНА", "ИСПРАВЛЕНИЕ", "ТРАССИРОВКА"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("output does not contain %q:\n%s", want, out.String())
+		}
+	}
+}
+
+func TestLanguageFromEnvironment(t *testing.T) {
+	t.Setenv("NIX_EXPLAIN_LANG", "ru")
+	var out, errOut bytes.Buffer
+	if code := Run(nil, strings.NewReader(sample), &out, &errOut, testRules(), ruTranslations(), "test"); code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	if !strings.Contains(out.String(), "ПРИЧИНА") {
+		t.Fatalf("environment language was not used:\n%s", out.String())
+	}
+}
+
+func TestJSONReportsLanguage(t *testing.T) {
+	var out, errOut bytes.Buffer
+	if code := Run([]string{"--json", "--lang", "ru"}, strings.NewReader(sample), &out, &errOut, testRules(), ruTranslations(), "test"); code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	var got struct {
+		Lang string   `json:"lang"`
+		Rule *kb.Rule `json:"rule"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if got.Lang != "ru" || got.Rule == nil || got.Rule.Title != "Бесконечная рекурсия при вычислении" {
+		t.Fatalf("unexpected JSON: %s", out.String())
+	}
+}
+
+func TestRussianList(t *testing.T) {
+	var out, errOut bytes.Buffer
+	if code := Run([]string{"list", "--lang", "ru"}, strings.NewReader(""), &out, &errOut, testRules(), ruTranslations(), "test"); code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	if !strings.Contains(out.String(), "ВЫЧИСЛЕНИЕ") {
+		t.Fatalf("category was not translated:\n%s", out.String())
 	}
 }

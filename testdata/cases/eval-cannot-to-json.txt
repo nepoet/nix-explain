@@ -1,0 +1,4 @@
+error: cannot convert a function to JSON
+       at /home/user/a.nix:1:1:
+            1| builtins.toJSON (x: x)
+             | ^

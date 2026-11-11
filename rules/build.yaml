@@ -152,3 +152,99 @@ fix: |
   Use the derivation's `.outPath` / `.drvPath` instead of building the path
   from strings. In a shell, take the path from `nix build --print-out-paths`
   rather than guessing the hash.
+
+---
+id: build-configure-failed
+title: configure script failed
+category: build
+match:
+  - "configure: error:"
+cause: |
+  The package's `configure` script refused to continue. The line after
+  `configure: error:` names the missing dependency, header or flag.
+fix: |
+  Read the specific message; it is usually accurate. Look at `config.log`
+  in the build directory for the compiler test that failed
+  (`nix log <drv>` keeps it). Add the missing package to `buildInputs` or
+  `nativeBuildInputs`, or pass the right `configureFlags`.
+
+---
+id: build-undefined-reference
+title: Linker cannot resolve a symbol
+category: build
+match:
+  - "undefined reference to"
+cause: |
+  The linker saw a call to a symbol but no library providing it. In Nix this
+  is almost always a library missing from `buildInputs`, or a `-l` flag that
+  points at a library not on the link path.
+fix: |
+  Find the package that provides the symbol (`nix-locate --top-level
+  '*libfoo.so*'`) and add it to `buildInputs`. If you set `LDFLAGS`
+  manually, use `pkg-config --libs foo` instead of hardcoding `-lfoo`.
+
+---
+id: store-no-signature
+title: Path has no valid signature
+category: store
+match:
+  - "lacks a valid signature"
+cause: |
+  Nix refuses to import a store path from an untrusted binary cache because
+  the signature does not match any key in `trusted-public-keys`.
+fix: |
+  Add the cache's public key to `trusted-public-keys` in /etc/nix/nix.conf,
+  or remove the untrusted `substituters` entry. Disabling signature checks
+  (`require-sigs = false`) works but lets anyone feed you binaries — only do
+  it on a machine you fully control.
+see_also:
+  - https://nix.dev/manual/nix/latest/store/types/http-binary-cache-store
+
+---
+id: store-db-busy
+title: The Nix database is busy
+category: store
+match:
+  - "database is busy"
+  - "database is locked"
+cause: |
+  Another Nix process holds the SQLite lock on the store database — usually a
+  build or a garbage collection running in parallel.
+fix: |
+  Retry in a moment. If nothing else is running, look for a stuck process
+  with `ps aux | grep nix` and restart the daemon
+  (`sudo systemctl restart nix-daemon`). Do not delete database files.
+
+---
+id: store-corrupted
+title: Store path is corrupted
+category: store
+match:
+  - "is corrupted"
+  - "corrupted file"
+cause: |
+  A file in the store does not match its expected hash, usually after an
+  interrupted download, a full disk or a bad disk.
+fix: |
+  Verify and repair:
+    sudo nix-store --verify --check-contents --repair
+  If the path cannot be repaired, delete it and rebuild:
+    nix-store --delete /nix/store/<path>
+  Then check the disk with `btrfs scrub` / `smartctl` if it happens again.
+
+---
+id: store-pure-path
+title: Path is not in the Nix store (pure evaluation)
+category: store
+match:
+  - "is not in the nix store"
+  - "in pure evaluation mode"
+cause: |
+  Pure evaluation mode (used by flakes and `nix eval --pure-eval`) forbids
+  reading arbitrary paths from the filesystem, because the result would
+  depend on the machine.
+fix: |
+  Add the file to the store (`nix store add-path ./file`) and reference the
+  resulting path, make it a flake input, or use `--impure` for a one-off
+  command. Configuration files that must be read at evaluation time should
+  live in the flake.

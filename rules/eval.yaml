@@ -237,3 +237,17 @@ fix: |
   `nix build path:.` to bypass the git filter.
 see_also:
   - https://nix.dev/manual/nix/latest/command-ref/new-cli/nix3-flake
+
+---
+id: eval-cannot-to-json
+title: Cannot convert a function to JSON
+category: eval
+match:
+  - "cannot convert a function to json"
+cause: |
+  `builtins.toJSON` was given a function. Only data (sets, lists, strings,
+  numbers, booleans, null) can be serialised; Nix cannot serialise code.
+fix: |
+  Pass the data the function produces, not the function itself: `toJSON (f x)`
+  instead of `toJSON f`. If the value comes from an option, make sure the
+  option holds a value rather than a function.

@@ -1,0 +1,1 @@
+error: path '/nix/store/cccccccccccccccccccccccccccccccc-foo-1.0' is corrupted

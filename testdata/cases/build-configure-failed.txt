@@ -1,0 +1,2 @@
+checking for openssl... no
+configure: error: openssl not found; install it or set OPENSSL_PREFIX

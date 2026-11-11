@@ -1,0 +1,1 @@
+error: Module `/home/user/module.nix' has an unsupported attribute `import'. This is caused by introducing a top-level `config' or `options' attribute.

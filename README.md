@@ -44,8 +44,17 @@ It never sends your code or logs anywhere.
 
 ## Install
 
+With Go:
+
 ```sh
 go install github.com/nepoet/nix-explain@latest
+```
+
+With Nix (flakes):
+
+```sh
+nix run github:nepoet/nix-explain -- --help
+nix profile install github:nepoet/nix-explain
 ```
 
 From a checkout:
@@ -54,6 +63,8 @@ From a checkout:
 git clone https://github.com/nepoet/nix-explain
 cd nix-explain
 go build -o nix-explain .
+# or
+nix build .# && ./result/bin/nix-explain --version
 ```
 
 ## Usage
@@ -61,6 +72,9 @@ go build -o nix-explain .
 ```sh
 # pipe an error into it
 nix build .#foo 2>&1 | nix-explain
+
+# same in Russian (or set NIX_EXPLAIN_LANG=ru / LANG=ru_RU.UTF-8)
+nix build .#foo 2>&1 | nix-explain --lang ru
 
 # or let it run the command (exit code is preserved, output is streamed)
 nix-explain run -- nixos-rebuild switch
@@ -85,7 +99,7 @@ In `run` mode the exit code of the wrapped command is returned unchanged.
 stdin / command output
       │
       ├── normalise: strip ANSI, collapse whitespace
-      ├── match:    38 substring rules → best scored hit
+      ├── match:    51 substring rules → best scored hit
       └── trace:    parse `at file:line:col`, drop /nix/store frames
 ```
 
@@ -111,6 +125,21 @@ when several fragments must appear together. Matching is deliberately
 substring-based: Nix rewords messages between versions, so exact matching
 would break on every release.
 
+## Languages
+
+The interface and the rules are available in English and Russian.
+`--lang auto` (the default) follows `NIX_EXPLAIN_LANG`, `LC_ALL`,
+`LC_MESSAGES` and `LANG`.
+
+Translations live in `i18n/<lang>.yaml`, one document per rule id. A rule
+without a translation falls back to English, and `go test ./...` fails if a
+translation is missing or incomplete.
+
+```sh
+nix-explain --lang ru list
+nix-explain --lang ru "error: infinite recursion encountered"
+```
+
 ## Coverage
 
 Rules are grouped by the stage where the error happens:
@@ -125,6 +154,7 @@ Rules are grouped by the stage where the error happens:
 | `flakes`   | experimental features, missing attributes, dirty git tree        |
 | `network`  | substituter unreachable, TLS/proxy issues                        |
 | `daemon`   | daemon not running, untrusted user                               |
+| `nixos`    | activation failures, failed systemd units                        |
 
 ## Contributing
 
@@ -151,8 +181,8 @@ scripts/e2e.sh ./nix-explain
   recognised. Unmatched output is reported and can be added with a PR.
 - Build logs are only triaged at the message level. For full logs use
   `nix log` and `nix-output-monitor`.
-- The knowledge base is written in English; a translation layer is not
-  implemented yet.
+- Russian translations are maintained by hand; a missing translation falls
+  back to English silently (the test suite keeps them in sync).
 
 ## License
 

@@ -92,3 +92,48 @@ func TestFindIsCaseAndWhitespaceInsensitive(t *testing.T) {
 		t.Fatalf("got %+v, want eval-infinite-recursion", hits)
 	}
 }
+
+func TestRussianTranslationsComplete(t *testing.T) {
+	rules := loadRules(t)
+	translations, err := kb.LoadTranslations(os.DirFS("../.."), "i18n", "ru")
+	if err != nil {
+		t.Fatalf("load translations: %v", err)
+	}
+	if len(translations) == 0 {
+		t.Fatal("no Russian translations found")
+	}
+
+	known := make(map[string]bool, len(rules))
+	for _, r := range rules {
+		known[r.ID] = true
+		tr, ok := translations[r.ID]
+		if !ok {
+			t.Errorf("%s: missing Russian translation", r.ID)
+			continue
+		}
+		if tr.Title == "" || tr.Cause == "" || tr.Fix == "" {
+			t.Errorf("%s: incomplete Russian translation", r.ID)
+		}
+	}
+	for id := range translations {
+		if !known[id] {
+			t.Errorf("%s: translation for unknown rule", id)
+		}
+	}
+}
+
+func TestTranslateKeepsEnglishForMissingRules(t *testing.T) {
+	rules := loadRules(t)
+	out := kb.Translate(rules, map[string]kb.Translation{
+		rules[0].ID: {ID: rules[0].ID, Title: "Заголовок", Cause: "причина", Fix: "исправление"},
+	})
+	if out[0].Title != "Заголовок" {
+		t.Fatalf("translation not applied: %q", out[0].Title)
+	}
+	if out[1].Title != rules[1].Title {
+		t.Fatalf("untranslated rule changed: %q", out[1].Title)
+	}
+	if rules[0].Title == "Заголовок" {
+		t.Fatal("Translate modified the input slice")
+	}
+}

@@ -11,38 +11,11 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/nepoet/nix-explain/internal/i18n"
 	"github.com/nepoet/nix-explain/internal/kb"
 	"github.com/nepoet/nix-explain/internal/render"
 	"github.com/nepoet/nix-explain/internal/trace"
 )
-
-const usage = `nix-explain — explain Nix error messages, offline.
-
-Usage:
-  nix-explain [flags] [text|file]      explain an error from a file or argument
-  nix-explain < error.log              explain an error from stdin
-  nix-explain run [flags] -- CMD...    run a command and explain if it fails
-  nix-explain list [query]             list known errors
-  nix-explain version                  print the version
-
-Flags (explain):
-  --json          print the matched rule as JSON
-  --color MODE    auto, always or never (default auto)
-  --show-all      keep nixpkgs frames in the trace
-
-Flags (run):
-  --json          print the matched rule as JSON
-  --color MODE    auto, always or never (default auto)
-  --show-all      keep nixpkgs frames in the trace
-
-Exit codes (explain): 0 matched, 2 not recognised.
-Exit codes (run): the exit code of CMD.
-
-Examples:
-  nix build .#foo 2>&1 | nix-explain
-  nix-explain run -- nixos-rebuild switch
-  nix-explain "error: infinite recursion encountered"
-`
 
 // maxCaptureBytes bounds how much of a wrapped command's output is kept for
 // analysis. Nix prints the interesting part of a failure at the very end.
@@ -52,25 +25,26 @@ type options struct {
 	json    bool
 	color   string
 	showAll bool
+	lang    string
 }
 
 // Run dispatches to a subcommand and returns the process exit code.
-func Run(args []string, stdin io.Reader, stdout, stderr io.Writer, rules []kb.Rule, version string) int {
+func Run(args []string, stdin io.Reader, stdout, stderr io.Writer, rules []kb.Rule, translations map[string]kb.Translation, version string) int {
 	if len(args) > 0 {
 		switch args[0] {
 		case "run":
-			return runCommand(args[1:], stdin, stdout, stderr, rules)
+			return runCommand(args[1:], stdin, stdout, stderr, rules, translations)
 		case "list":
-			return listCommand(args[1:], stdout, stderr, rules)
+			return listCommand(args[1:], stdout, stderr, rules, translations)
 		case "version", "--version", "-v":
 			fmt.Fprintf(stdout, "nix-explain %s\n", version)
 			return 0
 		case "help", "--help", "-h":
-			fmt.Fprint(stdout, usage)
+			fmt.Fprint(stdout, i18n.Get(i18n.Resolve("")).Usage)
 			return 0
 		}
 	}
-	return explainCommand(args, stdin, stdout, stderr, rules)
+	return explainCommand(args, stdin, stdout, stderr, rules, translations)
 }
 
 func newFlagSet(name string, stderr io.Writer, opts *options) *flag.FlagSet {
@@ -78,22 +52,38 @@ func newFlagSet(name string, stderr io.Writer, opts *options) *flag.FlagSet {
 	fs.SetOutput(stderr)
 	fs.BoolVar(&opts.json, "json", false, "print the matched rule as JSON")
 	fs.StringVar(&opts.color, "color", "auto", "color output: auto, always or never")
+	fs.StringVar(&opts.lang, "lang", "auto", "output language: en, ru, auto")
 	fs.BoolVar(&opts.showAll, "show-all", false, "keep nixpkgs frames in the trace")
-	fs.Usage = func() { fmt.Fprint(stderr, usage) }
+	fs.Usage = func() {
+		fmt.Fprint(stderr, i18n.Get(i18n.Resolve(opts.lang)).Usage)
+	}
 	return fs
 }
 
-func explainCommand(args []string, stdin io.Reader, stdout, stderr io.Writer, rules []kb.Rule) int {
+// localize resolves the language and returns translated rules plus the
+// matching interface strings.
+func localize(rules []kb.Rule, translations map[string]kb.Translation, lang string) ([]kb.Rule, i18n.Strings) {
+	resolved := i18n.Resolve(lang)
+	if resolved == "ru" && len(translations) > 0 {
+		return kb.Translate(rules, translations), i18n.Get(resolved)
+	}
+	return rules, i18n.Get(resolved)
+}
+
+func explainCommand(args []string, stdin io.Reader, stdout, stderr io.Writer, rules []kb.Rule, translations map[string]kb.Translation) int {
 	var opts options
 	fs := newFlagSet("nix-explain", stderr, &opts)
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
 		return 2
 	}
 
 	rest := fs.Args()
 	if len(rest) == 0 && isTerminal(stdin) {
 		// Nothing to explain and no piped input: do not wait forever.
-		fmt.Fprint(stderr, usage)
+		fmt.Fprint(stderr, i18n.Get(i18n.Resolve(opts.lang)).Usage)
 		return 2
 	}
 
@@ -103,10 +93,10 @@ func explainCommand(args []string, stdin io.Reader, stdout, stderr io.Writer, ru
 		return 2
 	}
 	if strings.TrimSpace(text) == "" {
-		fmt.Fprint(stderr, usage)
+		fmt.Fprint(stderr, i18n.Get(i18n.Resolve(opts.lang)).Usage)
 		return 2
 	}
-	return explain(text, stdout, stderr, rules, opts)
+	return explain(text, stdout, rules, translations, opts)
 }
 
 // isTerminal reports whether r is an interactive terminal. It is used to avoid
@@ -150,16 +140,18 @@ func isFile(path string) bool {
 
 // explain prints the best explanation and returns 0, or a "no match" report
 // and returns 2.
-func explain(text string, stdout, stderr io.Writer, rules []kb.Rule, opts options) int {
+func explain(text string, stdout io.Writer, rules []kb.Rule, translations map[string]kb.Translation, opts options) int {
+	rules, strs := localize(rules, translations, opts.lang)
 	tr := trace.Parse(text)
 	hits := kb.Find(rules, text)
 	renderOpts := render.Options{
 		Color:   colorEnabled(opts.color, stdout),
 		ShowAll: opts.showAll,
+		Strings: strs,
 	}
 
 	if opts.json {
-		writeJSON(stdout, hits, tr, opts.showAll)
+		writeJSON(stdout, hits, tr, opts.showAll, strs.Lang)
 		if len(hits) == 0 {
 			return 2
 		}
@@ -178,17 +170,20 @@ func explain(text string, stdout, stderr io.Writer, rules []kb.Rule, opts option
 	return 0
 }
 
-func runCommand(args []string, stdin io.Reader, stdout, stderr io.Writer, rules []kb.Rule) int {
+func runCommand(args []string, stdin io.Reader, stdout, stderr io.Writer, rules []kb.Rule, translations map[string]kb.Translation) int {
 	var opts options
 	flagArgs, cmdArgs := splitOnDashDash(args)
 
 	fs := newFlagSet("nix-explain run", stderr, &opts)
 	if err := fs.Parse(flagArgs); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
 		return 2
 	}
 	if len(cmdArgs) == 0 {
 		fmt.Fprint(stderr, "nix-explain run: missing command after --\n\n")
-		fmt.Fprint(stderr, usage)
+		fmt.Fprint(stderr, i18n.Get(i18n.Resolve(opts.lang)).Usage)
 		return 2
 	}
 
@@ -217,20 +212,22 @@ func runCommand(args []string, stdin io.Reader, stdout, stderr io.Writer, rules 
 	if opts.json {
 		explainTo = stdout
 	}
-	explainCaptured(captured.String(), explainTo, rules, opts)
+	explainCaptured(captured.String(), explainTo, rules, translations, opts)
 	return code
 }
 
-func explainCaptured(text string, stdout io.Writer, rules []kb.Rule, opts options) {
+func explainCaptured(text string, stdout io.Writer, rules []kb.Rule, translations map[string]kb.Translation, opts options) {
+	rules, strs := localize(rules, translations, opts.lang)
 	tr := trace.Parse(text)
 	hits := kb.Find(rules, text)
 	if opts.json {
-		writeJSON(stdout, hits, tr, opts.showAll)
+		writeJSON(stdout, hits, tr, opts.showAll, strs.Lang)
 		return
 	}
 	renderOpts := render.Options{
 		Color:   colorEnabled(opts.color, stdout),
 		ShowAll: opts.showAll,
+		Strings: strs,
 	}
 	if len(hits) == 0 {
 		render.NoMatch(stdout, text, tr, renderOpts)
@@ -251,18 +248,25 @@ func splitOnDashDash(args []string) (flags, command []string) {
 	return args, nil
 }
 
-func listCommand(args []string, stdout, stderr io.Writer, rules []kb.Rule) int {
+func listCommand(args []string, stdout, stderr io.Writer, rules []kb.Rule, translations map[string]kb.Translation) int {
 	var opts options
 	fs := flag.NewFlagSet("nix-explain list", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.BoolVar(&opts.json, "json", false, "print the knowledge base as JSON")
 	fs.StringVar(&opts.color, "color", "auto", "color output: auto, always or never")
-	fs.Usage = func() { fmt.Fprint(stderr, usage) }
+	fs.StringVar(&opts.lang, "lang", "auto", "output language: en, ru, auto")
+	fs.Usage = func() {
+		fmt.Fprint(stderr, i18n.Get(i18n.Resolve(opts.lang)).Usage)
+	}
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
 		return 2
 	}
 
 	query := strings.Join(fs.Args(), " ")
+	rules, strs := localize(rules, translations, opts.lang)
 	selected := kb.Filter(rules, query)
 
 	if opts.json {
@@ -278,12 +282,16 @@ func listCommand(args []string, stdout, stderr io.Writer, rules []kb.Rule) int {
 		fmt.Fprintf(stdout, "No rules match %q.\n", query)
 		return 2
 	}
-	render.List(stdout, selected, render.Options{Color: colorEnabled(opts.color, stdout)})
+	render.List(stdout, selected, render.Options{
+		Color:   colorEnabled(opts.color, stdout),
+		Strings: strs,
+	})
 	return 0
 }
 
 type jsonOutput struct {
 	Matched      bool          `json:"matched"`
+	Lang         string        `json:"lang"`
 	Rule         *kb.Rule      `json:"rule,omitempty"`
 	Score        int           `json:"score,omitempty"`
 	Location     *trace.Frame  `json:"location,omitempty"`
@@ -292,8 +300,8 @@ type jsonOutput struct {
 	Alternatives []string      `json:"alternatives,omitempty"`
 }
 
-func writeJSON(w io.Writer, hits []kb.Hit, tr trace.Trace, showAll bool) {
-	out := jsonOutput{}
+func writeJSON(w io.Writer, hits []kb.Hit, tr trace.Trace, showAll bool, lang string) {
+	out := jsonOutput{Lang: lang}
 	if !showAll {
 		out.HiddenFrames = tr.Hidden()
 	}

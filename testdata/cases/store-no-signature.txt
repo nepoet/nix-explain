@@ -1,0 +1,1 @@
+error: cannot add path '/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-foo-1.0' because it lacks a valid signature

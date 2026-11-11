@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"unicode/utf8"
 
+	"github.com/nepoet/nix-explain/internal/i18n"
 	"github.com/nepoet/nix-explain/internal/kb"
 	"github.com/nepoet/nix-explain/internal/trace"
 )
@@ -14,6 +16,7 @@ import (
 type Options struct {
 	Color   bool
 	ShowAll bool
+	Strings i18n.Strings
 }
 
 type painter struct{ on bool }
@@ -35,6 +38,7 @@ const ruleWidth = 72
 
 // Explain writes a full explanation for hit.
 func Explain(w io.Writer, hit kb.Hit, tr trace.Trace, opts Options) {
+	opts = withDefaults(opts)
 	p := painter{opts.Color}
 	r := hit.Rule
 
@@ -43,11 +47,11 @@ func Explain(w io.Writer, hit kb.Hit, tr trace.Trace, opts Options) {
 	fmt.Fprintln(w, p.dim(fmt.Sprintf("%s · %s", r.Category, r.ID)))
 	fmt.Fprintln(w)
 
-	section(w, p, "CAUSE", r.Cause)
-	section(w, p, "FIX", r.Fix)
+	section(w, p, opts.Strings.Cause, r.Cause)
+	section(w, p, opts.Strings.Fix, r.Fix)
 
 	if r.Example != "" {
-		fmt.Fprintln(w, p.cyan("EXAMPLE"))
+		fmt.Fprintln(w, p.cyan(opts.Strings.Example))
 		for _, line := range strings.Split(strings.TrimRight(r.Example, "\n"), "\n") {
 			fmt.Fprintf(w, "  %s\n", line)
 		}
@@ -55,7 +59,7 @@ func Explain(w io.Writer, hit kb.Hit, tr trace.Trace, opts Options) {
 	}
 
 	if len(r.SeeAlso) > 0 {
-		fmt.Fprintln(w, p.cyan("SEE ALSO"))
+		fmt.Fprintln(w, p.cyan(opts.Strings.SeeAlso))
 		for _, u := range r.SeeAlso {
 			fmt.Fprintf(w, "  %s\n", p.dim(u))
 		}
@@ -63,6 +67,13 @@ func Explain(w io.Writer, hit kb.Hit, tr trace.Trace, opts Options) {
 	}
 
 	renderTrace(w, p, tr, opts)
+}
+
+func withDefaults(opts Options) Options {
+	if opts.Strings.Cause == "" {
+		opts.Strings = i18n.Get("en")
+	}
+	return opts
 }
 
 func section(w io.Writer, p painter, title, body string) {
@@ -77,7 +88,7 @@ func renderTrace(w io.Writer, p painter, tr trace.Trace, opts Options) {
 	if len(tr.Frames) == 0 {
 		return
 	}
-	fmt.Fprintln(w, p.cyan("TRACE"))
+	fmt.Fprintln(w, p.cyan(opts.Strings.Trace))
 
 	loc, hasLoc := tr.Location()
 	if hasLoc {
@@ -107,44 +118,47 @@ func renderTrace(w io.Writer, p painter, tr trace.Trace, opts Options) {
 	}
 
 	if hidden := tr.Hidden(); hidden > 0 && !opts.ShowAll {
-		noun := "frames"
+		format := opts.Strings.HiddenMany
 		if hidden == 1 {
-			noun = "frame"
+			format = opts.Strings.HiddenOne
 		}
-		fmt.Fprintf(w, "  %s\n", p.dim(fmt.Sprintf("(%d %s from nixpkgs hidden — use --show-all to see them)", hidden, noun)))
+		fmt.Fprintf(w, "  %s\n", p.dim(fmt.Sprintf(format, hidden)))
 	}
 	fmt.Fprintln(w)
 }
 
 // NoMatch explains that nothing in the knowledge base matched.
 func NoMatch(w io.Writer, text string, tr trace.Trace, opts Options) {
+	opts = withDefaults(opts)
 	p := painter{opts.Color}
 
-	fmt.Fprintln(w, p.bold(p.yellow("No known explanation for this output.")))
+	fmt.Fprintln(w, p.bold(p.yellow(opts.Strings.NoMatchTitle)))
 	fmt.Fprintln(w, p.dim(strings.Repeat("─", ruleWidth)))
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "The error was not recognised. A few things you can do:")
-	fmt.Fprintf(w, "  - %s                 list every known error\n", p.cyan("nix-explain list"))
-	fmt.Fprintf(w, "  - %s       show the full trace\n", p.cyan("nix-explain --show-all"))
-	fmt.Fprintf(w, "  - %s  ask Nix for more detail\n", p.cyan("nix <command> --show-trace"))
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, p.dim("If this is a common error, please open an issue with the output:"))
+	fmt.Fprintln(w, opts.Strings.NoMatchIntro)
+	fmt.Fprintln(w, fmt.Sprintf(opts.Strings.NoMatchList,
+		p.cyan("nix-explain list"),
+		p.cyan("nix-explain --show-all"),
+		p.cyan("nix <command> --show-trace"),
+	))
+	fmt.Fprintln(w, p.dim(opts.Strings.NoMatchIssue))
 	fmt.Fprintln(w, p.dim("  https://github.com/nepoet/nix-explain/issues"))
 	fmt.Fprintln(w)
 
 	renderTrace(w, p, tr, opts)
 }
 
-// alsoMaybe lists lower-ranked rules that also matched.
+// AlsoMaybe lists lower-ranked rules that also matched.
 func AlsoMaybe(w io.Writer, hits []kb.Hit, opts Options) {
 	if len(hits) == 0 {
 		return
 	}
+	opts = withDefaults(opts)
 	p := painter{opts.Color}
 	if len(hits) > 3 {
 		hits = hits[:3]
 	}
-	fmt.Fprintln(w, p.dim("Also matched:"))
+	fmt.Fprintln(w, p.dim(opts.Strings.AlsoMatched))
 	for _, h := range hits {
 		fmt.Fprintf(w, "  %s\n", p.dim(fmt.Sprintf("%s  %s", h.Rule.ID, h.Rule.Title)))
 	}
@@ -153,6 +167,7 @@ func AlsoMaybe(w io.Writer, hits []kb.Hit, opts Options) {
 
 // List prints the knowledge base as a table grouped by category.
 func List(w io.Writer, rules []kb.Rule, opts Options) {
+	opts = withDefaults(opts)
 	p := painter{opts.Color}
 	category := ""
 	for _, r := range rules {
@@ -161,7 +176,11 @@ func List(w io.Writer, rules []kb.Rule, opts Options) {
 				fmt.Fprintln(w)
 			}
 			category = r.Category
-			fmt.Fprintln(w, p.cyan(strings.ToUpper(category)))
+			label := opts.Strings.Categories[category]
+			if label == "" {
+				label = strings.ToUpper(category)
+			}
+			fmt.Fprintln(w, p.cyan(label))
 		}
 		fmt.Fprintf(w, "  %s %s\n", p.green(fmt.Sprintf("%-34s", r.ID)), r.Title)
 	}
@@ -237,24 +256,29 @@ func isListItem(s string) bool {
 	return false
 }
 
-// wrapLine wraps one logical line, preserving its indentation.
+// wrapLine wraps one logical line, preserving its indentation. Width is
+// measured in runes, not bytes, so Cyrillic text wraps like Latin.
 func wrapLine(text string, width int) []string {
 	trimmed := strings.TrimSpace(text)
 	indent := text[:len(text)-len(strings.TrimLeft(text, " "))]
-	if len(text) <= width {
+	indentWidth := utf8.RuneCountInString(indent)
+	if utf8.RuneCountInString(text) <= width {
 		return []string{indent + trimmed}
 	}
 	var out []string
 	line := ""
+	lineWidth := 0
 	for _, word := range strings.Fields(trimmed) {
+		w := utf8.RuneCountInString(word)
 		switch {
 		case line == "":
-			line = word
-		case len(indent)+len(line)+1+len(word) > width:
+			line, lineWidth = word, w
+		case indentWidth+lineWidth+1+w > width:
 			out = append(out, indent+line)
-			line = word
+			line, lineWidth = word, w
 		default:
 			line += " " + word
+			lineWidth += 1 + w
 		}
 	}
 	if line != "" {

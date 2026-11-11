@@ -74,3 +74,35 @@ fix: |
   during evaluation.
 see_also:
   - https://search.nixos.org/options
+
+---
+id: module-unsupported-attribute
+title: Module has an unsupported attribute
+category: modules
+match:
+  - "has an unsupported attribute"
+cause: |
+  A module returned an attribute that the module system does not understand.
+  Usually a top-level key was misspelled (`import` instead of `imports`), or
+  a value was placed directly in the module instead of under `config`.
+fix: |
+  Move the attribute under `config` or `options`, and check the spelling of
+  `imports`, `config`, `options` and `_module`. The message names the module
+  file that returned the bad attribute.
+
+---
+id: hm-file-collision
+title: Home Manager file collision
+category: modules
+tags: [home-manager, dotfiles]
+match:
+  - "is in the way of"
+cause: |
+  Home Manager wants to create a file that already exists on disk and was not
+  created by Home Manager. It refuses to overwrite it silently.
+fix: |
+  Remove or move the existing file, then run `home-manager switch` again. To
+  keep a backup automatically, set
+  `home-manager.backupFileExtension = "backup";`. Use
+  `home.file."<path>".force = true;` only for files you are sure Home
+  Manager should own.

@@ -130,12 +130,20 @@ if [ "$FULL" = "1" ]; then
 fi
 
 echo "== run mode =="
-"$BIN" run --color never -- nix eval --file missing-attr.nix >run.out 2>run.err
+"$BIN" run --lang en --color never -- nix eval --file missing-attr.nix >run.out 2>run.err
 rc=$?
 if [ "$rc" -eq 1 ] && grep -q "Attribute missing" run.err; then
 	ok "run preserves exit code and explains on stderr"
 else
 	no "run mode" "exit=$rc, stderr did not contain the explanation"
+fi
+
+echo "== translations =="
+nix eval --file missing-attr.nix 2>&1 | "$BIN" --lang ru --color never >ru.out 2>&1
+if grep -q "ПРИЧИНА" ru.out && grep -q "ИСПРАВЛЕНИЕ" ru.out; then
+	ok "russian output"
+else
+	no "russian output" "labels were not translated"
 fi
 
 echo

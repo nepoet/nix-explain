@@ -127,3 +127,35 @@ fix: |
     trusted-users = root arch
   then restart the daemon. Add only accounts you control: trusted users can
   run builds with extra privileges.
+
+---
+id: flake-lock-out-of-date
+title: flake.lock is out of date
+category: flakes
+match:
+  - "lock file"
+match_all:
+  - "out of date"
+cause: |
+  `flake.nix` declares inputs that are not recorded in `flake.lock`, or the
+  lock file was written by a different Nix version.
+fix: |
+  Update the lock file:
+    nix flake lock          # add missing inputs only
+    nix flake update        # move every input to its latest revision
+  Commit `flake.lock` together with `flake.nix` so other machines get the
+  same revisions.
+
+---
+id: flake-not-git-repo
+title: Directory is not a git repository
+category: flakes
+match:
+  - "is not a git repository"
+cause: |
+  The fetcher was asked for a git revision (or the flake uses `self` as a
+  path) but the directory has no `.git`.
+fix: |
+  Run `git init && git add -A && git commit` inside the directory, or build
+  it as a plain path (`nix build path:.`). Remote inputs with `git+file://`
+  also require a repository with at least one commit.

@@ -11,8 +11,8 @@ import (
 	"github.com/nepoet/nix-explain/internal/kb"
 )
 
-//go:embed rules
-var rulesFS embed.FS
+//go:embed rules i18n
+var assets embed.FS
 
 // version is overridden at build time:
 //
@@ -29,10 +29,17 @@ func main() {
 			}
 		}
 	}
-	rules, err := kb.Load(rulesFS, "rules")
+
+	rules, err := kb.Load(assets, "rules")
 	if err != nil {
 		os.Stderr.WriteString("nix-explain: cannot load rules: " + err.Error() + "\n")
 		os.Exit(1)
 	}
-	os.Exit(cli.Run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr, rules, version))
+	translations, err := kb.LoadTranslations(assets, "i18n", "ru")
+	if err != nil {
+		os.Stderr.WriteString("nix-explain: cannot load translations: " + err.Error() + "\n")
+		os.Exit(1)
+	}
+
+	os.Exit(cli.Run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr, rules, translations, version))
 }

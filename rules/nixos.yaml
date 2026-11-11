@@ -1,0 +1,39 @@
+# NixOS activation and systemd problems during a switch.
+
+id: nixos-activation-failed
+title: Activation script failed
+category: nixos
+tags: [nixos, switch, activation]
+match:
+  - "activation script failed"
+  - "failed to activate the new configuration"
+cause: |
+  The new system was built, but the activation phase failed: a user/group
+  could not be created, a file could not be moved, or a unit could not be
+  reloaded. The failing command is printed above the error.
+fix: |
+  Read the lines just above the error. Fix the underlying problem and run
+  `nixos-rebuild switch` again. If the machine is in a half-activated state,
+  boot the previous generation or run `nixos-rebuild switch --rollback`.
+see_also:
+  - https://nixos.org/manual/nixos/stable/#sec-changing-config
+
+---
+id: systemd-unit-failed
+title: A systemd unit failed during the switch
+category: nixos
+match:
+  - "control process exited with error code"
+  - "job for"
+match_all:
+  - "failed"
+cause: |
+  A systemd unit started or restarted by the new configuration exited with a
+  non-zero code. This is common after changing a service's settings or when
+  a required directory/user does not exist yet.
+fix: |
+  Inspect the unit, not the rebuild output:
+    systemctl status <unit>
+    journalctl -u <unit> -b --no-pager
+  Fix the configuration and switch again. If the unit is only failing
+  because of a stale state, `systemctl reset-failed <unit>` clears it.
