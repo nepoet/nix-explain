@@ -1,0 +1,2 @@
+error: assertion 'x != null' failed
+       at /home/user/a.nix:2:3:

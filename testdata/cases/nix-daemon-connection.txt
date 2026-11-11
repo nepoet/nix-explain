@@ -1,0 +1,2 @@
+error: cannot connect to the Nix daemon; did you forget to start it?
+       at /nix/store/ffffffffffffffffffffffffffffffff-source/lib/daemon.nix:1:1:

@@ -1,0 +1,76 @@
+# Module system errors (NixOS, home-manager, nix-darwin, flake-parts).
+
+id: module-option-not-exist
+title: The option does not exist
+category: modules
+tags: [options, nixos, home-manager]
+match:
+  - "the option"
+match_all:
+  - "does not exist"
+cause: |
+  Either the option name is misspelled or was renamed, the module that
+  declares it is not imported, or a value was placed under `config` for an
+  option that was never declared under `options`.
+fix: |
+  Search the option by name: search.nixos.org/options (and
+  home-manager-options.extranix.com for home-manager). Import the module
+  that declares it. If the trace ends with `It seems as if you're trying to
+  declare an option by placing it into config rather than options!`, then
+  you are inside a module that should use `options.<name> = lib.mkOption`.
+see_also:
+  - https://search.nixos.org/options
+  - https://nixos.org/manual/nixos/stable/#sec-option-declarations
+
+---
+id: module-type-mismatch
+title: Option value has the wrong type
+category: modules
+match:
+  - "is not of type"
+cause: |
+  The value assigned to an option does not match the type declared by its
+  module: a string where an integer is expected, a single value where a list
+  is expected, or an attribute set where a string is expected.
+fix: |
+  The expected type is quoted in the message. Convert the value: wrap lists
+  in `[ ... ]`, booleans are `true` / `false` (not `"true"`), paths and
+  strings are interchangeable only in some options. Check the option's
+  documentation for the exact type.
+see_also:
+  - https://search.nixos.org/options
+
+---
+id: module-conflict
+title: Conflicting definitions for an option
+category: modules
+match:
+  - "conflicting definition values"
+cause: |
+  Two modules, or two places in the same file, define the same option with
+  different values and the same priority. The module system refuses to guess.
+fix: |
+  Keep one definition, or resolve the priority explicitly:
+  `lib.mkDefault` (lowest), `lib.mkForce` (highest), `lib.mkBefore` /
+  `lib.mkAfter` for lists. The message lists every definition with its file,
+  so start from the two files it names.
+see_also:
+  - https://nixos.org/manual/nixos/stable/#sec-option-definitions
+
+---
+id: module-no-value
+title: Option is used but has no value
+category: modules
+match:
+  - "has no value defined"
+  - "is used but not defined"
+cause: |
+  Something reads the option but nothing sets it and the declaration has no
+  default. Typical causes: a service was enabled without its required
+  sub-option, or the module that supplies a default was not imported.
+fix: |
+  Set the option explicitly, import the module that provides the default, or
+  read it lazily (`config.<opt>` only when needed) instead of forcing it
+  during evaluation.
+see_also:
+  - https://search.nixos.org/options

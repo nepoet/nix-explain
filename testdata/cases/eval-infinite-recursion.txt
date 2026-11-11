@@ -1,0 +1,9 @@
+error:
+       … while evaluating the file '/home/user/lab/recursion.nix':
+
+       error: infinite recursion encountered
+       at /home/user/lab/recursion.nix:2:7:
+            1| let
+            2|   a = b;
+             |       ^
+            3|   b = a;

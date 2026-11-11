@@ -1,0 +1,1 @@
+error: file 'foo.nix' was not found in the Nix search path (add it to $NIX_PATH or -I)

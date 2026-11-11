@@ -1,0 +1,153 @@
+# Build failures and local store problems.
+
+id: build-failed
+title: A build failed with a non-zero exit code
+category: build
+tags: [build, log]
+match:
+  - "builder"
+match_all:
+  - "failed with exit code"
+cause: |
+  The derivation's builder script stopped with an error. Nix prints only the
+  tail of the log, which is rarely where the real error is. Older versions
+  say `builder for '...drv' failed`, newer ones say
+  `Cannot build '...drv'. Reason: builder failed with exit code N`.
+fix: |
+  Read the full log, not the tail:
+    nix log /nix/store/<hash>-<name>.drv
+  Then reproduce interactively:
+    nix develop /nix/store/<hash>-<name>.drv
+    # or, for a package you are writing:
+    nix-shell -p <buildInputs> --run 'bash -x build.sh'
+  The first `error:` in the log is the cause; everything after it is fallout.
+  For `configure: error` and `No such file or directory` for a header, the
+  fix is usually a missing `nativeBuildInputs` / `buildInputs` entry.
+
+---
+id: build-missing-header
+title: Build cannot find a header or file
+category: build
+match:
+  - "fatal error:"
+match_all:
+  - "no such file or directory"
+cause: |
+  The compiler or configure script cannot find a header (or a data file)
+  that the build expects. In Nix, dependencies are not in `/usr/include`;
+  they must be declared as build inputs.
+fix: |
+  Find the package that ships the header:
+    nix-locate --top-level '*/include/foo.h'
+  Add it to `buildInputs` (libraries) or `nativeBuildInputs` (tools, and
+  anything needed by `configure`). For `pkg-config` lookups also set
+  `PKG_CONFIG_PATH` via the `pkg-config` hook, which Nix sets up
+  automatically when the package is in `nativeBuildInputs`.
+
+---
+id: build-pkgconfig
+title: pkg-config cannot find a dependency
+category: build
+match:
+  - "pkg-config search path"
+  - "was not found in the pkg-config search path"
+cause: |
+  The build asks pkg-config for a `.pc` file that is not visible. In Nix
+  this means the dependency is missing from `buildInputs`, or it is there
+  but only in `nativeBuildInputs` / only for a different host platform.
+fix: |
+  Add the package that provides the `.pc` file to `buildInputs`. The error
+  names the module (for example `openssl`), so `nix-locate '*/lib/pkgconfig/openssl.pc'`
+  finds the right attribute. For `--static` builds, `pkg-config` may also
+  need `PKG_CONFIG_ALLOW_SYSTEM_LIBS`.
+
+---
+id: store-hash-mismatch
+title: Hash mismatch for downloaded content
+category: store
+tags: [hash, fetch, reproducibility]
+match:
+  - "hash mismatch"
+cause: |
+  The content Nix downloaded does not match the pinned hash. Either the
+  upstream file changed under a mutable URL (branch, tag, "latest"), the
+  hash was copied incorrectly, or a mirror served something different.
+fix: |
+  Get the correct hash:
+    nix-prefetch-url https://example.com/file.tar.gz
+    nix store prefetch-file https://example.com/file.tar.gz
+  Paste it in place of the old value. If the URL points at a branch, pin a
+  tag or a commit instead — otherwise the failure will repeat. For flakes
+  run `nix flake update` to refresh `flake.lock`.
+
+---
+id: store-no-space
+title: No space left on device
+category: store
+match:
+  - "no space left on device"
+cause: |
+  The Nix store (or the filesystem holding it) is full. Generations, dev
+  shells and old flake inputs are all kept until garbage collected.
+fix: |
+  Free space, keeping the current generation:
+    nix-collect-garbage -d
+    nh clean all --keep 3            # if you use nh
+  Check what holds space with `nix-tree` or `nix-du`. You can also set
+  `min-free` / `max-free` in /etc/nix/nix.conf so the daemon collects
+  garbage automatically.
+
+---
+id: store-permission
+title: Permission denied accessing the Nix store
+category: store
+match:
+  - "opening lock file"
+  - "cannot open connection to the remote store"
+  - "permission denied"
+match_all:
+  - "permission denied"
+cause: |
+  Either your user cannot talk to the daemon socket, or the store is owned
+  by another user (common after switching between single-user and
+  multi-user installs).
+fix: |
+  Check the daemon and the socket:
+    systemctl status nix-daemon
+    ls -l /nix/var/nix/daemon-socket/
+  The socket must be writable by your user (or your user must be in the
+  `nix-users` group; log out and back in after adding it). If files under
+  /nix/store belong to another user, fix ownership with
+  `sudo chown -R root:root /nix/store` — never make the store world-writable.
+
+---
+id: store-lock
+title: The store is locked by another process
+category: store
+match:
+  - "unable to lock path"
+  - "cannot acquire lock"
+cause: |
+  Another Nix process holds a lock on the same store path — usually a build
+  or a garbage collection running in parallel.
+fix: |
+  Wait for the other process, or find it with
+  `ps aux | grep -E 'nix|garbage'`. If the process is gone but the lock
+  remains, the daemon can be restarted (`sudo systemctl restart nix-daemon`);
+  never delete lock files by hand while a build is running.
+
+---
+id: store-path-invalid
+title: Not a valid store path
+category: store
+match:
+  - "is not a valid store path"
+cause: |
+  A string that should name a store path does not have the expected
+  `/nix/store/<32-character-hash>-<name>` shape. Usually a path was
+  constructed by hand, or `toString` was applied to something that is not a
+  derivation.
+fix: |
+  Use the derivation's `.outPath` / `.drvPath` instead of building the path
+  from strings. In a shell, take the path from `nix build --print-out-paths`
+  rather than guessing the hash.

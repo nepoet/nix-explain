@@ -1,0 +1,5 @@
+error: attribute 'x' already defined at /home/user/lab/already-defined.nix:1:5
+       at /home/user/lab/already-defined.nix:1:12:
+            1| let x = 1; x = 2; in x
+             |            ^
+            2|

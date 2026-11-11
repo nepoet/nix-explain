@@ -1,0 +1,88 @@
+# Package-level errors raised by nixpkgs' meta checks.
+
+id: pkg-unfree
+title: Package has an unfree licence
+category: packages
+tags: [licence, unfree, nixpkgs]
+match:
+  - "unfree license"
+  - "unfree licence"
+cause: |
+  nixpkgs refuses to evaluate packages whose licence is not free by default.
+  This is a policy check, not a build failure: nothing is downloaded.
+fix: |
+  Enable unfree packages globally:
+    nixpkgs.config.allowUnfree = true;      # NixOS / home-manager
+  or per command:
+    NIXPKGS_ALLOW_UNFREE=1 nix build --impure .#foo
+  For a single package prefer `allowUnfreePredicate` so the rest stays free.
+see_also:
+  - https://nixos.org/manual/nixpkgs/stable/#sec-allow-unfree
+
+---
+id: pkg-broken
+title: Package is marked as broken
+category: packages
+match:
+  - "is marked as broken"
+cause: |
+  The package's metadata says it does not build on this platform or with
+  this nixpkgs revision. The mark is set by the person who last saw it fail.
+fix: |
+  Prefer another package or pin an older nixpkgs. If you know it works, you
+  can override the mark locally (`nixpkgs.config.allowBroken = true` or
+  `NIXPKGS_ALLOW_BROKEN=1` with `--impure`), but expect the build to fail.
+see_also:
+  - https://github.com/NixOS/nixpkgs/issues
+
+---
+id: pkg-insecure
+title: Package is marked as insecure
+category: packages
+match:
+  - "is marked as insecure"
+cause: |
+  The package has a known vulnerability and is blocked by default. The
+  message usually names the CVE.
+fix: |
+  Update nixpkgs first — the fix may already be available. If you must keep
+  it, allow it explicitly (`nixpkgs.config.allowInsecurePredicate` or
+  `NIXPKGS_ALLOW_INSECURE=1` with `--impure`), ideally only for that one
+  package.
+see_also:
+  - https://nixos.org/manual/nixpkgs/stable/#sec-allow-insecure
+
+---
+id: pkg-unsupported-platform
+title: Package is not available for this platform
+category: packages
+match:
+  - "is not supported on"
+  - "is not available on the requested hostplatform"
+cause: |
+  The package's `meta.platforms` does not include your system, or the
+  requested system does not match the machine you are building on.
+fix: |
+  Check `meta.platforms` with `nix eval nixpkgs#foo.meta.platforms`. Use a
+  package that supports your system, or set
+  `nixpkgs.config.allowUnsupportedSystem = true` if you are willing to try
+  an unsupported build. For cross builds pass an explicit `system`.
+see_also:
+  - https://nixos.org/manual/nixpkgs/stable/#chap-cross
+
+---
+id: pkg-collision
+title: Two store paths collide
+category: packages
+match:
+  - "collision between"
+cause: |
+  Two derivations want to produce different content at the same store path.
+  This normally means a fixed-output derivation (fetchurl, fetchFromGitHub)
+  changed content, or two sources were mixed with the same output hash.
+fix: |
+  Delete the stale path and let Nix rebuild it:
+    nix-store --delete /nix/store/<path>
+  If the content really changed upstream, update the hash with
+  `nix-prefetch-url` / `nix store prefetch-file`. In CI it usually means a
+  cached path from a different revision leaked into the store.

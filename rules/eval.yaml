@@ -1,0 +1,239 @@
+# Evaluation errors: the Nix language itself.
+
+id: eval-infinite-recursion
+title: Infinite recursion while evaluating
+category: eval
+tags: [recursion, modules, config]
+match:
+  - "infinite recursion encountered"
+  - "stack overflow (possible infinite recursion)"
+cause: |
+  Nix tried to compute a value in terms of itself. The usual offenders are
+  an option whose value mentions the same option (directly or through
+  `config`), a module that ends up importing itself, or a `rec` attribute
+  set with no base case.
+fix: |
+  Look at the innermost frame that points at your own file (see TRACE).
+  Check for `foo = config.foo;`, for a `lib.mkIf` whose condition reads the
+  option it guards, and for an `imports` cycle. Then replace the self
+  reference with the raw value, or split the definition with
+  `lib.mkDefault` / `lib.mkForce`.
+see_also:
+  - https://nixos.org/manual/nixos/stable/#sec-option-definitions
+  - https://nix.dev/manual/nix/latest/language/constructs
+
+---
+id: eval-undefined-variable
+title: Undefined variable
+category: eval
+match:
+  - "undefined variable"
+cause: |
+  Nix has no implicit globals. Every name has to be bound by `let`, a
+  function argument, `rec`, or `with`. A typo in a name produces this same
+  error, which makes it look more mysterious than it is.
+fix: |
+  Bind the name: `let foo = ...; in ...`, or take it as an argument
+  (`{ foo }: ...`). For packages add `with pkgs;`, for library helpers use
+  `lib.`. `nix repl` followed by `:l ./file.nix` shows which names exist.
+see_also:
+  - https://nix.dev/tutorials/nix-language
+
+---
+id: eval-attribute-missing
+title: Attribute missing from a set
+category: eval
+match:
+  - "attribute '"
+match_all:
+  - "missing"
+cause: |
+  An attribute set does not contain the key you asked for. Most often it is
+  a typo, a renamed attribute after a nixpkgs update, or the wrong level of
+  nesting (`.foo.bar` where only `.foo` exists).
+fix: |
+  Check the spelling; Nix often prints `Did you mean ...?` right below the
+  error. To look up a package attribute use `nix search nixpkgs <name>`, for
+  options use `nixos-option <option>` or search.nixos.org/options. When
+  overriding a package, `nix eval --impure --expr 'builtins.attrNames ...'`
+  shows what actually exists.
+see_also:
+  - https://search.nixos.org/packages
+
+---
+id: eval-attribute-already-defined
+title: Attribute defined twice
+category: eval
+match:
+  - "already defined at"
+cause: |
+  The same key appears twice in one attribute set, for example
+  `let x = 1; x = 2; in x` or two identical keys in a set literal.
+fix: |
+  Remove one definition. If you meant to merge two sets, use the update
+  operator (`a // b`) or `lib.mergeAttrs`; inside the module system define
+  the option in two modules and use `lib.mkDefault` / `lib.mkForce`
+  instead of repeating the key.
+
+---
+id: eval-cannot-coerce
+title: Cannot coerce value to a string
+category: eval
+match:
+  - "cannot coerce a"
+cause: |
+  A string was required but a set or a list was given: string interpolation
+  (`"${value}"`), `toString`, or `builtins.concatStringsSep` all require
+  coercible values. Lists are only coercible with `toString`, sets never are.
+fix: |
+  Convert explicitly: `builtins.toString`, `lib.concatStringsSep "," list`,
+  `builtins.toJSON`, or use the specific attribute you need
+  (`x.name` instead of `x`).
+example: |
+  builtins.toString { a = 1; }        # error
+  builtins.toJSON { a = 1; }          # ok
+
+---
+id: eval-cannot-add
+title: Cannot add values of different types
+category: eval
+match:
+  - "cannot add a"
+cause: |
+  `+` is overloaded in Nix: numbers add, strings concatenate, paths join.
+  Mixing the types is an error.
+fix: |
+  Convert before adding: `toString n`, `builtins.fromJSON`, or use
+  `lib.concatStrings` / `lib.concatStringsSep` for lists of strings.
+
+---
+id: eval-expected-type
+title: Wrong value type where a set, list or string was expected
+category: eval
+match:
+  - "expected a set but found"
+  - "expected a list but found"
+  - "expected a string but found"
+  - "expected a boolean but found"
+  - "while a set was expected"
+  - "while a list was expected"
+  - "while a string was expected"
+cause: |
+  Function argument destructuring (`{ a }: ...`) only accepts an attribute
+  set, and builtins such as `map` or `attrNames` accept only lists or sets.
+  Calling them with the wrong type produces this error.
+fix: |
+  Wrap the value (`{ ... }` or `[ ... ]`) or change the function to accept
+  what you pass. When a `callPackage`-style function is called manually,
+  remember it expects the whole attribute set, not a single argument.
+
+---
+id: eval-call-non-function
+title: Attempt to call something that is not a function
+category: eval
+match:
+  - "attempt to call something which is not a function"
+cause: |
+  `f x` was used where `f` is a set, list or string. Very common when
+  `pkgs.foo` is an attribute set (for example `python3Packages`) and is used
+  as if it were a function.
+fix: |
+  Check the type with `builtins.typeOf f` in `nix repl`. Use `f.attr` for
+  sets, `builtins.elemAt f n` for lists, and add `.override` or
+  `callPackage` when you really want to apply a package function.
+
+---
+id: eval-unexpected-argument
+title: Function called with an unexpected argument
+category: eval
+match:
+  - "called with unexpected argument"
+cause: |
+  The function's argument pattern does not list this name and does not end
+  with `...`. Typically an extra attribute is passed through `callPackage`,
+  `overrideAttrs` or a module.
+fix: |
+  Remove the argument, add it to the pattern, or add `...` to accept extra
+  attributes: `{ foo, bar, ... }:`. For `overrideAttrs` remember the
+  argument is the previous attributes, not a free-form set.
+
+---
+id: eval-missing-argument
+title: Function called without a required argument
+category: eval
+match:
+  - "called without required argument"
+cause: |
+  A function declares an argument without a default and the caller did not
+  supply it. With `callPackage` this means the name is not in the package
+  set; with a hand-written call it means the attribute set is incomplete.
+fix: |
+  Pass the argument explicitly, add the providing package to your inputs, or
+  give it a default: `{ foo ? null }: ...`. For `callPackage`, check that the
+  argument name matches a package in scope.
+
+---
+id: eval-assertion-failed
+title: Assertion failed
+category: eval
+match:
+  - "assertion '"
+match_all:
+  - "failed"
+cause: |
+  An `assert condition; value` evaluated its condition to false. In nixpkgs
+  and the module system this is usually a licence, platform or consistency
+  check rather than your own code.
+fix: |
+  Read the frame in TRACE that points at your file. If the assert comes from
+  nixpkgs, the frames above it name the condition that failed (for example
+  `allowUnfree` or a missing required option). Fix the condition, not the
+  assert.
+
+---
+id: eval-syntax-error
+title: Syntax error while parsing a Nix file
+category: eval
+match:
+  - "syntax error"
+cause: |
+  The parser stopped at the position printed in the trace. The actual
+  mistake is usually a few characters earlier: a missing `;`, an unbalanced
+  bracket, `let` without `in`, or `=` used where `==` was meant.
+fix: |
+  Open the file at the reported line and look at the end of the previous
+  construct. Running `nixfmt` on the file often points at the problem, and
+  `nix-instantiate --parse file.nix` gives a shorter error message.
+
+---
+id: eval-abort
+title: Evaluation aborted
+category: eval
+match:
+  - "evaluation aborted with the following error message"
+cause: |
+  `builtins.abort` or a library using it stopped evaluation. In the module
+  system this is often an explicit consistency check that names the exact
+  problem in the message above the trace.
+fix: |
+  Fix the condition described in the message. If the message comes from a
+  library you use, searching its source for the text usually shows what it
+  expects.
+
+---
+id: eval-file-not-found
+title: File or path not found
+category: eval
+match:
+  - "was not found in the nix search path"
+  - "no such file or directory"
+cause: |
+  A path literal, `import`, `callPackage` or `builtins.readFile` points at
+  something that does not exist. In flakes this also happens when a file is
+  not tracked by git: flakes only see files known to git.
+fix: |
+  Check the path relative to the file that contains it (`./foo` is relative
+  to the importing file). For flakes run `git add` on new files, or use
+  `nix build path:.` to bypass the git filter.
+see_also:
+  - https://nix.dev/manual/nix/latest/command-ref/new-cli/nix3-flake

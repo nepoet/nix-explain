@@ -1,0 +1,1 @@
+error: user 'arch' is not a trusted user, so cannot override the setting 'substituters'

@@ -1,0 +1,1 @@
+error: flake 'path:/home/user/lab/flake-demo' does not provide attribute 'packages.x86_64-linux.nope', 'legacyPackages.x86_64-linux.nope' or 'nope'

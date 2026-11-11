@@ -1,0 +1,1 @@
+error: unable to download 'https://cache.nixos.org/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee.narinfo': Could not resolve host: cache.nixos.org (6)

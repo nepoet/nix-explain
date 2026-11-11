@@ -1,0 +1,4 @@
+error: Package ‘foo-1.2.3’ is marked as broken, refusing to evaluate.
+
+a) To temporarily allow broken packages, you can use an environment variable
+   for a single invocation of the nix tools.

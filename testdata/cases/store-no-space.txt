@@ -1,0 +1,1 @@
+error: writing file ‘/nix/store/cccccccccccccccccccccccccccccccc-foo-1.0/share/doc/README’: No space left on device

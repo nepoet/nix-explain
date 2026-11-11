@@ -1,0 +1,9 @@
+error:
+       … while evaluating the file '/home/user/lab/missing-attr.nix':
+
+       error: attribute 'b' missing
+       at /home/user/lab/missing-attr.nix:1:1:
+            1| { a = 1; }.b
+             | ^
+            2|
+       Did you mean a?

@@ -1,0 +1,26 @@
+error:
+       … while evaluating the file '/home/user/lab/module-missing.nix':
+
+       … while evaluating the attribute 'config.foo'
+         at /nix/store/r11n5gilgy5yslmy08hzb890y10wgm1g-source/lib/modules.nix:402:9:
+          401|         options = checked options;
+          402|         config = checked (removeAttrs config [ "_module" ]);
+             |         ^
+          403|         _module = checked (config._module);
+
+       … while calling the 'seq' builtin
+         at /nix/store/r11n5gilgy5yslmy08hzb890y10wgm1g-source/lib/modules.nix:402:18:
+          401|         options = checked options;
+          402|         config = checked (removeAttrs config [ "_module" ]);
+             |                  ^
+          403|         _module = checked (config._module);
+
+       (stack trace truncated; use '--show-trace' to show the full, detailed trace)
+
+       error: The option `foo' does not exist. Definition values:
+       - In `<unknown-file>':
+           {
+             bar = 1;
+           }
+
+       It seems as if you're trying to declare an option by placing it into `config' rather than `options'!

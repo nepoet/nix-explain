@@ -1,0 +1,3 @@
+Package openssl was not found in the pkg-config search path.
+Perhaps you should add the directory containing `openssl.pc'
+to the PKG_CONFIG_PATH environment variable

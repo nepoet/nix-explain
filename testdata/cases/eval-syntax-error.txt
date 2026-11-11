@@ -1,0 +1,5 @@
+error: syntax error, unexpected end of file, expecting ';'
+       at /home/user/lab/syntax.nix:2:1:
+            1| { a = 1
+            2|
+             | ^

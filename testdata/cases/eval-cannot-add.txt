@@ -1,0 +1,8 @@
+error:
+       … while evaluating the file '/home/user/lab/add-types.nix':
+
+       error: cannot add a string to an integer
+       at /home/user/lab/add-types.nix:1:5:
+            1| 1 + "x"
+             |     ^
+            2|

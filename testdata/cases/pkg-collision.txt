@@ -1,0 +1,1 @@
+error: collision between `/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-foo-1.0' and `/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-foo-1.0'

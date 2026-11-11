@@ -1,0 +1,1 @@
+error: unable to lock path '/nix/store/dddddddddddddddddddddddddddddddd-foo-1.0' for writing

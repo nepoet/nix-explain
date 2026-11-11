@@ -1,0 +1,129 @@
+# Flakes, networking and daemon problems.
+
+id: flake-feature-disabled
+title: Flakes or nix-command are disabled
+category: flakes
+match:
+  - "experimental nix feature"
+match_all:
+  - "is disabled"
+cause: |
+  This Nix installation does not enable the experimental features that
+  provide `nix build`, `nix flake` and the rest of the new CLI.
+fix: |
+  Add them permanently in /etc/nix/nix.conf (or ~/.config/nix/nix.conf):
+    experimental-features = nix-command flakes
+  then restart the daemon (`sudo systemctl restart nix-daemon`). For a single
+  command:
+    nix --extra-experimental-features 'nix-command flakes' build .#foo
+
+---
+id: flake-attribute-missing
+title: Flake does not provide the requested attribute
+category: flakes
+match:
+  - "does not provide attribute"
+cause: |
+  The flake evaluated fine but has no output with that name for your system.
+  Most often the flake defines `packages.x86_64-linux.default` while the
+  requested name or system is different, or the attribute lives under
+  `legacyPackages`.
+fix: |
+  Inspect what the flake exposes:
+    nix flake show
+    nix flake show --json | jq 'keys'
+  Then use an existing name, pass the right `--system`, or add the output to
+  the flake's `outputs`.
+see_also:
+  - https://nix.dev/manual/nix/latest/command-ref/new-cli/nix3-flake-show
+
+---
+id: flake-not-a-flake
+title: The directory is not a flake
+category: flakes
+match:
+  - "is not a flake"
+cause: |
+  The path was treated as a flake but has no `flake.nix`, or the flake file
+  is not visible because it is not tracked by git.
+fix: |
+  Add a `flake.nix` (start from `nix flake init`), or use the path as a
+  plain file/directory (`nix build -f ./default.nix`). If the file exists
+  but is untracked, run `git add flake.nix` — flakes only see git-tracked
+  files inside a repository.
+see_also:
+  - https://nix.dev/manual/nix/latest/command-ref/new-cli/nix3-flake
+
+---
+id: flake-dirty-tree
+title: Git tree is dirty
+category: flakes
+match:
+  - "git tree"
+match_all:
+  - "dirty"
+cause: |
+  The flake lives in a git repository with uncommitted changes. Nix warns
+  about this because the build no longer matches any commit.
+fix: |
+  Commit or stash the changes (`git add -A && git commit`), or build the
+  working tree explicitly with `nix build path:.` instead of `nix build .`.
+  For CI, make sure the checkout step does not leave generated files behind.
+
+---
+id: network-download-failed
+title: Cannot download from a binary cache or URL
+category: network
+match:
+  - "unable to download"
+  - "could not resolve host"
+  - "ssl certificate problem"
+  - "connection timed out"
+cause: |
+  Nix could not reach the substituter or the URL in a fetcher. Causes range
+  from no network and DNS problems to a proxy, a corporate TLS certificate,
+  or an unreachable cache.
+fix: |
+  Test the URL with `curl -I <url>`. Behind a proxy set `http_proxy` /
+  `https_proxy` for the daemon (systemd drop-in), and for TLS issues set
+  `NIX_SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt`. To avoid the
+  network entirely, repeat the build with `--offline` and see whether the
+  required paths are already in the store.
+
+---
+id: nix-daemon-connection
+title: Cannot connect to the Nix daemon
+category: daemon
+priority: 10
+match:
+  - "cannot connect to the nix daemon"
+  - "connection refused"
+  - "no such file or directory"
+match_all:
+  - "daemon"
+cause: |
+  The Nix client talks to `nix-daemon` over a Unix socket, and the daemon is
+  not running or the socket is not reachable (container, chroot, wrong
+  `NIX_REMOTE`).
+fix: |
+  Start and check the service:
+    sudo systemctl enable --now nix-daemon.socket
+    systemctl status nix-daemon
+  Inside a container or a chroot you may need
+  `NIX_REMOTE=daemon` with the socket mounted, or a single-user install.
+
+---
+id: nix-untrusted-user
+title: User is not a trusted user
+category: daemon
+priority: 10
+match:
+  - "is not a trusted user"
+cause: |
+  The daemon refuses a setting that only trusted users may change, such as
+  `substituters`, `sandbox` or `trusted-public-keys`.
+fix: |
+  Add your user to `trusted-users` in /etc/nix/nix.conf:
+    trusted-users = root arch
+  then restart the daemon. Add only accounts you control: trusted users can
+  run builds with extra privileges.

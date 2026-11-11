@@ -1,0 +1,12 @@
+# build output
+/nix-explain
+/dist/
+
+# nix
+result
+result-*
+.direnv/
+
+# editors and OS
+*.swp
+.DS_Store

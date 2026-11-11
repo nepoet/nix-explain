@@ -1,0 +1,1 @@
+error: opening lock file '/nix/var/nix/db/big-lock': Permission denied

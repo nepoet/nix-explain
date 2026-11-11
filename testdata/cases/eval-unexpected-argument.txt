@@ -1,0 +1,1 @@
+error: anonymous function at /home/user/a.nix:1:1 called with unexpected argument 'foo'

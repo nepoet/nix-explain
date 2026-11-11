@@ -1,0 +1,9 @@
+error:
+       … while calling the 'fetchurl' builtin
+         at «string»:1:1:
+            1| builtins.fetchurl { url = "https://raw.githubusercontent.com/NixOS/nix/master/README.md"; sha256 = "0000000000000000000000000000000000000000000000000000"; }
+             | ^
+
+       error: hash mismatch in file downloaded from 'https://raw.githubusercontent.com/NixOS/nix/master/README.md':
+         specified: sha256:0000000000000000000000000000000000000000000000000000
+         got:       sha256:0py14c6pz9797z5wj1yx4f8q358cb1xghcmac1w58qw701yknd77

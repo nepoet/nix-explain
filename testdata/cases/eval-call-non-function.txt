@@ -1,0 +1,3 @@
+error: attempt to call something which is not a function but a set
+
+       at «string»:1:1:

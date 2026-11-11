@@ -1,0 +1,1 @@
+error: path 'foo-1.0' is not a valid store path

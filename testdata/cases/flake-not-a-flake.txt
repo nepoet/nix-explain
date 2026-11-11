@@ -1,0 +1,1 @@
+error: path '/home/user/proj' is not a flake (because it doesn't contain a 'flake.nix' file)

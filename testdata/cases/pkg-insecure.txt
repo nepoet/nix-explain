@@ -1,0 +1,4 @@
+error: Package ‘bar-2.0’ is marked as insecure, refusing to evaluate.
+
+Known issues:
+ - CVE-2024-12345

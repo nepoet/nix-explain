@@ -1,0 +1,18 @@
+error:
+       … while evaluating the file '/home/user/lab/module-conflict.nix':
+
+       … while evaluating the attribute 'value'
+         at /nix/store/r11n5gilgy5yslmy08hzb890y10wgm1g-source/lib/modules.nix:1209:7:
+         1208|     // {
+         1209|       value = addErrorContext "while evaluating the option `${showOption loc}':" (
+             |       ^
+         1210|         # Apply the 'apply' function to the merged value. This allows options to
+
+       … while evaluating the option `x':
+
+       (stack trace truncated; use '--show-trace' to show the full, detailed trace)
+
+       error: The option `x' has conflicting definition values:
+       - In `<unknown-file>': 2
+       - In `<unknown-file>': 1
+       Use `lib.mkForce value` or `lib.mkDefault value` to change the priority on any of these definitions.
