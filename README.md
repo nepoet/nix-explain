@@ -80,7 +80,7 @@ One-line installer (above), or:
 With Go (the hotfix is a prerelease, so pin it):
 
 ```sh
-go install github.com/nepoet/nix-explain@v0.2.3-hotfix
+go install github.com/nepoet/nix-explain@v0.2.4-hotfix
 ```
 
 With Nix (flakes):
@@ -237,7 +237,7 @@ scripts/e2e.sh ./nix-explain
   but are not captured. This is deliberate: no surprises in automation.
 - A terminal's scrollback is not readable by portable means; the capture is
   written at the moment the command fails, not scraped afterwards.
-- `v0.2.3-hotfix` is a semver prerelease, so `go install ...@latest` still
+- `v0.2.4-hotfix` is a semver prerelease, so `go install ...@latest` still
   resolves to the previous stable release. Pin the version, or use the
   installer.
 

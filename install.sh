@@ -13,7 +13,7 @@
 set -eu
 
 REPO="nepoet/nix-explain"
-VERSION="${NIX_EXPLAIN_VERSION:-0.2.3-hotfix}"
+VERSION="${NIX_EXPLAIN_VERSION:-0.2.4-hotfix}"
 
 PREFIX="${HOME}/.local/bin"
 BINDIR=""

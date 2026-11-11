@@ -5,7 +5,7 @@
 #   scripts/release.sh --publish  # build and create the GitHub release
 set -euo pipefail
 
-VERSION=${VERSION:-0.2.3-hotfix}
+VERSION=${VERSION:-0.2.4-hotfix}
 TAG="v${VERSION}"
 OUT=dist
 REPO=nepoet/nix-explain

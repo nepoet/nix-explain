@@ -24,21 +24,22 @@ func dir() string {
 		return d
 	}
 
-	uid := os.Getuid()
+	// A shim running under sudo must write where the invoking user will look:
+	// their runtime dir, or a per-uid temp dir as a fallback.
 	if s := os.Getenv("SUDO_UID"); s != "" {
-		if v, err := strconv.Atoi(s); err == nil {
-			uid = v
+		if uid, err := strconv.Atoi(s); err == nil {
+			runtime := fmt.Sprintf("/run/user/%d", uid)
+			if fi, err := os.Stat(runtime); err == nil && fi.IsDir() {
+				return filepath.Join(runtime, "nix-explain")
+			}
+			return filepath.Join(os.TempDir(), fmt.Sprintf("nix-explain-%d", uid))
 		}
 	}
 
-	// A user's own runtime dir is only usable by that user (or root).
-	if xdg := os.Getenv("XDG_RUNTIME_DIR"); xdg != "" && os.Getuid() == uid {
+	if xdg := os.Getenv("XDG_RUNTIME_DIR"); xdg != "" {
 		return filepath.Join(xdg, "nix-explain")
 	}
-	if xdg := os.Getenv("XDG_RUNTIME_DIR"); xdg != "" && os.Getuid() == 0 {
-		return filepath.Join(xdg, "nix-explain")
-	}
-	return filepath.Join(os.TempDir(), fmt.Sprintf("nix-explain-%d", uid))
+	return filepath.Join(os.TempDir(), fmt.Sprintf("nix-explain-%d", os.Getuid()))
 }
 
 // ttyKey identifies the terminal a capture belongs to. Different tabs and
