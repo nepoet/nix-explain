@@ -27,7 +27,6 @@ func (p painter) wrap(code, s string) string {
 
 func (p painter) bold(s string) string   { return p.wrap("1", s) }
 func (p painter) dim(s string) string    { return p.wrap("2", s) }
-func (p painter) red(s string) string    { return p.wrap("31", s) }
 func (p painter) green(s string) string  { return p.wrap("32", s) }
 func (p painter) yellow(s string) string { return p.wrap("33", s) }
 func (p painter) cyan(s string) string   { return p.wrap("36", s) }
@@ -80,7 +79,8 @@ func renderTrace(w io.Writer, p painter, tr trace.Trace, opts Options) {
 	}
 	fmt.Fprintln(w, p.cyan("TRACE"))
 
-	if loc, ok := tr.Location(); ok {
+	loc, hasLoc := tr.Location()
+	if hasLoc {
 		fmt.Fprintf(w, "  %s %s\n", p.green("→"), p.bold(fmt.Sprintf("%s:%d:%d", loc.File, loc.Line, loc.Col)))
 		if loc.Description != "" {
 			fmt.Fprintf(w, "    %s\n", p.dim(loc.Description))
@@ -91,7 +91,10 @@ func renderTrace(w io.Writer, p painter, tr trace.Trace, opts Options) {
 	if !opts.ShowAll {
 		frames = tr.Visible()
 	}
-	for i, f := range frames {
+	for _, f := range frames {
+		if hasLoc && f.File == loc.File && f.Line == loc.Line && f.Col == loc.Col {
+			continue // already shown as the primary location
+		}
 		desc := f.Description
 		if desc == "" {
 			desc = "at"
@@ -99,9 +102,6 @@ func renderTrace(w io.Writer, p painter, tr trace.Trace, opts Options) {
 		line := fmt.Sprintf("  %s %s (%s:%d:%d)", p.dim("·"), desc, f.File, f.Line, f.Col)
 		if f.Internal {
 			line = p.dim(line)
-		}
-		if !f.Internal && i == len(frames)-1 {
-			continue // already shown as the primary location
 		}
 		fmt.Fprintln(w, line)
 	}
@@ -163,7 +163,7 @@ func List(w io.Writer, rules []kb.Rule, opts Options) {
 			category = r.Category
 			fmt.Fprintln(w, p.cyan(strings.ToUpper(category)))
 		}
-		fmt.Fprintf(w, "  %-34s %s\n", p.green(r.ID), r.Title)
+		fmt.Fprintf(w, "  %s %s\n", p.green(fmt.Sprintf("%-34s", r.ID)), r.Title)
 	}
 }
 

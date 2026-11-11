@@ -104,7 +104,8 @@ category: store
 match:
   - "opening lock file"
   - "cannot open connection to the remote store"
-  - "permission denied"
+  - "/nix/store"
+  - "/nix/var"
 match_all:
   - "permission denied"
 cause: |

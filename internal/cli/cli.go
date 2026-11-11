@@ -2,7 +2,6 @@
 package cli
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -44,6 +43,10 @@ Examples:
   nix-explain run -- nixos-rebuild switch
   nix-explain "error: infinite recursion encountered"
 `
+
+// maxCaptureBytes bounds how much of a wrapped command's output is kept for
+// analysis. Nix prints the interesting part of a failure at the very end.
+const maxCaptureBytes = 8 << 20
 
 type options struct {
 	json    bool
@@ -87,7 +90,14 @@ func explainCommand(args []string, stdin io.Reader, stdout, stderr io.Writer, ru
 		return 2
 	}
 
-	text, err := readInput(fs.Args(), stdin)
+	rest := fs.Args()
+	if len(rest) == 0 && isTerminal(stdin) {
+		// Nothing to explain and no piped input: do not wait forever.
+		fmt.Fprint(stderr, usage)
+		return 2
+	}
+
+	text, err := readInput(rest, stdin)
 	if err != nil {
 		fmt.Fprintf(stderr, "nix-explain: %v\n", err)
 		return 2
@@ -99,12 +109,30 @@ func explainCommand(args []string, stdin io.Reader, stdout, stderr io.Writer, ru
 	return explain(text, stdout, stderr, rules, opts)
 }
 
+// isTerminal reports whether r is an interactive terminal. It is used to avoid
+// blocking on stdin when the command is invoked without arguments.
+func isTerminal(r io.Reader) bool {
+	f, ok := r.(*os.File)
+	if !ok {
+		return false
+	}
+	fi, err := f.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.Mode()&os.ModeCharDevice != 0
+}
+
 func readInput(args []string, stdin io.Reader) (string, error) {
 	switch {
 	case len(args) == 0:
 		b, err := io.ReadAll(stdin)
 		return string(b), err
 	case len(args) == 1:
+		if args[0] == "-" {
+			b, err := io.ReadAll(stdin)
+			return string(b), err
+		}
 		if isFile(args[0]) {
 			b, err := os.ReadFile(args[0])
 			return string(b), err
@@ -165,10 +193,10 @@ func runCommand(args []string, stdin io.Reader, stdout, stderr io.Writer, rules 
 	}
 
 	cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
-	var captured bytes.Buffer
+	captured := newTailBuffer(maxCaptureBytes)
 	cmd.Stdin = stdin
-	cmd.Stdout = io.MultiWriter(stdout, &captured)
-	cmd.Stderr = io.MultiWriter(stderr, &captured)
+	cmd.Stdout = io.MultiWriter(stdout, captured)
+	cmd.Stderr = io.MultiWriter(stderr, captured)
 
 	err := cmd.Run()
 	if err == nil {
@@ -189,11 +217,11 @@ func runCommand(args []string, stdin io.Reader, stdout, stderr io.Writer, rules 
 	if opts.json {
 		explainTo = stdout
 	}
-	explainCaptured(captured.String(), explainTo, stderr, rules, opts)
+	explainCaptured(captured.String(), explainTo, rules, opts)
 	return code
 }
 
-func explainCaptured(text string, stdout, stderr io.Writer, rules []kb.Rule, opts options) {
+func explainCaptured(text string, stdout io.Writer, rules []kb.Rule, opts options) {
 	tr := trace.Parse(text)
 	hits := kb.Find(rules, text)
 	if opts.json {
@@ -228,6 +256,7 @@ func listCommand(args []string, stdout, stderr io.Writer, rules []kb.Rule) int {
 	fs := flag.NewFlagSet("nix-explain list", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.BoolVar(&opts.json, "json", false, "print the knowledge base as JSON")
+	fs.StringVar(&opts.color, "color", "auto", "color output: auto, always or never")
 	fs.Usage = func() { fmt.Fprint(stderr, usage) }
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -264,7 +293,10 @@ type jsonOutput struct {
 }
 
 func writeJSON(w io.Writer, hits []kb.Hit, tr trace.Trace, showAll bool) {
-	out := jsonOutput{HiddenFrames: tr.Hidden()}
+	out := jsonOutput{}
+	if !showAll {
+		out.HiddenFrames = tr.Hidden()
+	}
 
 	frames := tr.Visible()
 	if showAll {

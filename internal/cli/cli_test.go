@@ -111,3 +111,23 @@ func TestListFilter(t *testing.T) {
 		t.Fatalf("filtered rule missing:\n%s", out.String())
 	}
 }
+
+func TestDashReadsStdin(t *testing.T) {
+	var out, errOut bytes.Buffer
+	if code := Run([]string{"-"}, strings.NewReader(sample), &out, &errOut, testRules(), "test"); code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	if !strings.Contains(out.String(), "Infinite recursion") {
+		t.Fatalf("unexpected output:\n%s", out.String())
+	}
+}
+
+func TestEmptyInputShowsUsage(t *testing.T) {
+	var out, errOut bytes.Buffer
+	if code := Run(nil, strings.NewReader(""), &out, &errOut, testRules(), "test"); code != 2 {
+		t.Fatalf("exit = %d, want 2", code)
+	}
+	if !strings.Contains(errOut.String(), "Usage:") {
+		t.Fatalf("usage not printed:\n%s", errOut.String())
+	}
+}
