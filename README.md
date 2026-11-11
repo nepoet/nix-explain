@@ -59,8 +59,9 @@ nix-explain
 ```
 
 The installer puts the binary in `~/.local/bin`, installs wrappers for `nix`,
-`nixos-rebuild`, `home-manager`, `nix-shell` and `nix-build`, and prints how
-to add the directory to `PATH` if needed.
+`nixos-rebuild`, `home-manager`, `nix-shell` and `nix-build`, and adds that
+directory to `PATH` in your shell config (idempotent, with a marker line).
+Use `--no-modify-path` to skip that.
 
 ## How the "just works" part works
 
@@ -100,7 +101,8 @@ nix build .# && ./result/bin/nix-explain --version
 ```
 
 Installer options: `--prefix DIR`, `--system` (wrappers in `/usr/local/bin`,
-needs sudo, for `sudo nixos-rebuild`), `--no-shims`, `--uninstall`.
+needs sudo, for `sudo nixos-rebuild`), `--no-shims`, `--no-modify-path`,
+`--uninstall`.
 
 ## Usage
 

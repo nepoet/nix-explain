@@ -20,12 +20,14 @@ BINDIR=""
 WITH_SHIMS=1
 SYSTEM=0
 UNINSTALL=0
+MODIFY_PATH=1
 
 while [ $# -gt 0 ]; do
 	case "$1" in
 	--prefix) PREFIX="$2"; shift 2 ;;
 	--system) SYSTEM=1; shift ;;
 	--no-shims) WITH_SHIMS=0; shift ;;
+	--no-modify-path) MODIFY_PATH=0; shift ;;
 	--uninstall) UNINSTALL=1; shift ;;
 	--version) VERSION="$2"; shift 2 ;;
 	-h | --help)
@@ -131,8 +133,28 @@ say ""
 case ":${PATH}:" in
 *":${PREFIX}:"*) ;;
 *)
-	say "Add ${PREFIX} to PATH, for example:"
-	say "  echo 'export PATH=\"${PREFIX}:\$PATH\"' >> ~/.bashrc && source ~/.bashrc"
+	if [ "$MODIFY_PATH" = 1 ]; then
+		added=0
+		for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
+			[ -f "$rc" ] || continue
+			grep -q "added by nix-explain" "$rc" 2>/dev/null && continue
+			{
+				printf '\n# added by nix-explain\n'
+				printf 'export PATH="%s:$PATH"\n' "$PREFIX"
+			} >>"$rc"
+			added=1
+		done
+		if [ "$added" = 1 ]; then
+			say "Added ${PREFIX} to PATH in your shell config."
+			say "Restart the shell, or run: source ~/.bashrc"
+		else
+			say "Add ${PREFIX} to PATH manually:"
+			say "  export PATH=\"${PREFIX}:\$PATH\""
+		fi
+	else
+		say "Add ${PREFIX} to PATH, for example:"
+		say "  echo 'export PATH=\"${PREFIX}:\$PATH\"' >> ~/.bashrc && source ~/.bashrc"
+	fi
 	;;
 esac
 say "Done. Run a failing nix command, then just type: nix-explain"
