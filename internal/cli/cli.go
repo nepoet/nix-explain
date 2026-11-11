@@ -26,6 +26,7 @@ type options struct {
 	color   string
 	showAll bool
 	lang    string
+	width   int
 }
 
 // Run dispatches to a subcommand and returns the process exit code.
@@ -53,6 +54,7 @@ func newFlagSet(name string, stderr io.Writer, opts *options) *flag.FlagSet {
 	fs.BoolVar(&opts.json, "json", false, "print the matched rule as JSON")
 	fs.StringVar(&opts.color, "color", "auto", "color output: auto, always or never")
 	fs.StringVar(&opts.lang, "lang", "auto", "output language: en, ru, auto")
+	fs.IntVar(&opts.width, "width", 0, "wrap text to this many columns (default 72)")
 	fs.BoolVar(&opts.showAll, "show-all", false, "keep nixpkgs frames in the trace")
 	fs.Usage = func() {
 		fmt.Fprint(stderr, i18n.Get(i18n.Resolve(opts.lang)).Usage)
@@ -147,6 +149,7 @@ func explain(text string, stdout io.Writer, rules []kb.Rule, translations map[st
 	renderOpts := render.Options{
 		Color:   colorEnabled(opts.color, stdout),
 		ShowAll: opts.showAll,
+		Width:   opts.width,
 		Strings: strs,
 	}
 
@@ -227,6 +230,7 @@ func explainCaptured(text string, stdout io.Writer, rules []kb.Rule, translation
 	renderOpts := render.Options{
 		Color:   colorEnabled(opts.color, stdout),
 		ShowAll: opts.showAll,
+		Width:   opts.width,
 		Strings: strs,
 	}
 	if len(hits) == 0 {
@@ -255,6 +259,7 @@ func listCommand(args []string, stdout, stderr io.Writer, rules []kb.Rule, trans
 	fs.BoolVar(&opts.json, "json", false, "print the knowledge base as JSON")
 	fs.StringVar(&opts.color, "color", "auto", "color output: auto, always or never")
 	fs.StringVar(&opts.lang, "lang", "auto", "output language: en, ru, auto")
+	fs.IntVar(&opts.width, "width", 0, "wrap text to this many columns (default 72)")
 	fs.Usage = func() {
 		fmt.Fprint(stderr, i18n.Get(i18n.Resolve(opts.lang)).Usage)
 	}
@@ -284,6 +289,7 @@ func listCommand(args []string, stdout, stderr io.Writer, rules []kb.Rule, trans
 	}
 	render.List(stdout, selected, render.Options{
 		Color:   colorEnabled(opts.color, stdout),
+		Width:   opts.width,
 		Strings: strs,
 	})
 	return 0

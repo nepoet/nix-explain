@@ -82,6 +82,9 @@ nix-explain run -- nixos-rebuild switch
 # explain a message you already have
 nix-explain "error: infinite recursion encountered"
 
+# narrow terminal (or a vertical screen recording)
+nix-explain --width 44 < error.log
+
 # machine readable
 nix-explain --json < error.log
 

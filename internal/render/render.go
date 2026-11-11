@@ -16,6 +16,7 @@ import (
 type Options struct {
 	Color   bool
 	ShowAll bool
+	Width   int // text width in columns; 0 means the default of 72
 	Strings i18n.Strings
 }
 
@@ -41,14 +42,15 @@ func Explain(w io.Writer, hit kb.Hit, tr trace.Trace, opts Options) {
 	opts = withDefaults(opts)
 	p := painter{opts.Color}
 	r := hit.Rule
+	width := opts.Width
 
 	fmt.Fprintln(w, p.bold(r.Title))
-	fmt.Fprintln(w, p.dim(strings.Repeat("─", ruleWidth)))
+	fmt.Fprintln(w, p.dim(strings.Repeat("─", width)))
 	fmt.Fprintln(w, p.dim(fmt.Sprintf("%s · %s", r.Category, r.ID)))
 	fmt.Fprintln(w)
 
-	section(w, p, opts.Strings.Cause, r.Cause)
-	section(w, p, opts.Strings.Fix, r.Fix)
+	section(w, p, opts.Strings.Cause, r.Cause, width)
+	section(w, p, opts.Strings.Fix, r.Fix, width)
 
 	if r.Example != "" {
 		fmt.Fprintln(w, p.cyan(opts.Strings.Example))
@@ -73,12 +75,15 @@ func withDefaults(opts Options) Options {
 	if opts.Strings.Cause == "" {
 		opts.Strings = i18n.Get("en")
 	}
+	if opts.Width <= 0 {
+		opts.Width = ruleWidth
+	}
 	return opts
 }
 
-func section(w io.Writer, p painter, title, body string) {
+func section(w io.Writer, p painter, title, body string, width int) {
 	fmt.Fprintln(w, p.cyan(title))
-	for _, line := range wrap(strings.TrimRight(body, "\n"), ruleWidth) {
+	for _, line := range wrap(strings.TrimRight(body, "\n"), width) {
 		fmt.Fprintf(w, "  %s\n", line)
 	}
 	fmt.Fprintln(w)
@@ -94,7 +99,9 @@ func renderTrace(w io.Writer, p painter, tr trace.Trace, opts Options) {
 	if hasLoc {
 		fmt.Fprintf(w, "  %s %s\n", p.green("→"), p.bold(fmt.Sprintf("%s:%d:%d", loc.File, loc.Line, loc.Col)))
 		if loc.Description != "" {
-			fmt.Fprintf(w, "    %s\n", p.dim(loc.Description))
+			for _, line := range wrap(loc.Description, opts.Width-2) {
+				fmt.Fprintf(w, "    %s\n", p.dim(line))
+			}
 		}
 	}
 
@@ -133,7 +140,7 @@ func NoMatch(w io.Writer, text string, tr trace.Trace, opts Options) {
 	p := painter{opts.Color}
 
 	fmt.Fprintln(w, p.bold(p.yellow(opts.Strings.NoMatchTitle)))
-	fmt.Fprintln(w, p.dim(strings.Repeat("─", ruleWidth)))
+	fmt.Fprintln(w, p.dim(strings.Repeat("─", opts.Width)))
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, opts.Strings.NoMatchIntro)
 	fmt.Fprintln(w, fmt.Sprintf(opts.Strings.NoMatchList,
@@ -165,10 +172,13 @@ func AlsoMaybe(w io.Writer, hits []kb.Hit, opts Options) {
 	fmt.Fprintln(w)
 }
 
-// List prints the knowledge base as a table grouped by category.
+// List prints the knowledge base as a table grouped by category. Narrow
+// output (for example a phone-width terminal) switches to a two-line layout
+// instead of overflowing the window.
 func List(w io.Writer, rules []kb.Rule, opts Options) {
 	opts = withDefaults(opts)
 	p := painter{opts.Color}
+	narrow := opts.Width < 60
 	category := ""
 	for _, r := range rules {
 		if r.Category != category {
@@ -181,6 +191,13 @@ func List(w io.Writer, rules []kb.Rule, opts Options) {
 				label = strings.ToUpper(category)
 			}
 			fmt.Fprintln(w, p.cyan(label))
+		}
+		if narrow {
+			fmt.Fprintf(w, "  %s\n", p.green(r.ID))
+			for _, line := range wrap(r.Title, opts.Width-4) {
+				fmt.Fprintf(w, "    %s\n", line)
+			}
+			continue
 		}
 		fmt.Fprintf(w, "  %s %s\n", p.green(fmt.Sprintf("%-34s", r.ID)), r.Title)
 	}

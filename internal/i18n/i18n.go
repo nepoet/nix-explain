@@ -130,6 +130,7 @@ Flags:
   --lang LANG     output language: en, ru, auto (default auto)
   --json          print the matched rule as JSON
   --color MODE    auto, always or never (default auto)
+  --width N       wrap text to N columns (default 72)
   --show-all      keep nixpkgs frames in the trace
 
 Exit codes (explain): 0 matched, 2 not recognised.
@@ -154,6 +155,7 @@ const usageRU = `nix-explain — объясняет ошибки Nix, офлай
   --lang ЯЗЫК     язык вывода: en, ru, auto (по умолчанию auto)
   --json          вывести подобранное правило в JSON
   --color РЕЖИМ   auto, always, never (по умолчанию auto)
+  --width N       переносить текст по N колонкам (по умолчанию 72)
   --show-all      не скрывать кадры из nixpkgs
 
 Коды возврата (explain): 0 — ошибка распознана, 2 — нет.
