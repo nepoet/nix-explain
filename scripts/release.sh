@@ -24,7 +24,7 @@ for os in linux darwin; do
 	done
 done
 
-(cd "$OUT" && sha256sum ./*.tar.gz > checksums.txt)
+(cd "$OUT" && sha256sum ./*.tar.gz | sed 's#  \./#  #' > checksums.txt)
 ls -lh "$OUT"
 
 if [ "${1:-}" = "--publish" ]; then

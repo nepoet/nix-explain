@@ -99,6 +99,8 @@ BASE="https://github.com/${REPO}/releases/download/v${VERSION}"
 say "downloading ${ASSET}..."
 fetch "${BASE}/${ASSET}" "$TMP/pkg.tar.gz" || die "cannot download ${ASSET}"
 fetch "${BASE}/checksums.txt" "$TMP/checksums.txt" || die "cannot download checksums.txt"
+sed 's#  \./#  #' "$TMP/checksums.txt" > "$TMP/checksums.clean"
+mv "$TMP/checksums.clean" "$TMP/checksums.txt"
 
 line=$(grep " ${ASSET}\$" "$TMP/checksums.txt" || true)
 [ -n "$line" ] || die "no checksum for ${ASSET}"
