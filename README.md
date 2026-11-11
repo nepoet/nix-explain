@@ -102,7 +102,7 @@ In `run` mode the exit code of the wrapped command is returned unchanged.
 stdin / command output
       │
       ├── normalise: strip ANSI, collapse whitespace
-      ├── match:    51 substring rules → best scored hit
+      ├── match:    53 substring rules → best scored hit
       └── trace:    parse `at file:line:col`, drop /nix/store frames
 ```
 

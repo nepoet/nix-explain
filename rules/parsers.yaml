@@ -1,0 +1,39 @@
+# Errors raised by the JSON and TOML parsers used by builtins.
+
+id: eval-parse-json
+title: Invalid JSON passed to fromJSON
+category: eval
+priority: 10
+tags: [json, fromJSON, parser]
+match:
+  - "json.exception.parse_error"
+  - "while decoding a json string"
+cause: |
+  `builtins.fromJSON` received a string that is not valid JSON. The line and
+  column in the message refer to the JSON text, not to your Nix file — the Nix
+  trace above only shows where `fromJSON` was called.
+fix: |
+  Validate the embedded document with `jq .` or `python3 -m json.tool`. Typical
+  causes: a trailing comma, an unquoted key, single instead of double quotes,
+  comments (JSON has none), or a truncated file. Quote the whole string with
+  `''...''` if it contains `$` or backslashes.
+see_also:
+  - https://nix.dev/manual/nix/latest/language/builtins#builtins-fromJSON
+
+---
+id: eval-parse-toml
+title: Invalid TOML passed to fromTOML
+category: eval
+priority: 10
+tags: [toml, fromTOML, parser]
+match:
+  - "while parsing toml"
+cause: |
+  `builtins.fromTOML` received text that is not valid TOML. The snippet under
+  the error points into the TOML document, not into your Nix code.
+fix: |
+  Validate the file with `taplo check` or `python3 -c 'import tomllib,sys;
+  tomllib.load(open(sys.argv[1],"rb"))' file.toml`. Common causes: a key with
+  no value, duplicated tables or keys, or an unquoted string.
+see_also:
+  - https://nix.dev/manual/nix/latest/language/builtins#builtins-fromTOML

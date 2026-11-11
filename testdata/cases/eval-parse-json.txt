@@ -1,0 +1,12 @@
+error:
+       … while evaluating the file '/home/user/lab/from-json.nix':
+
+       … while calling the 'fromJSON' builtin
+         at /home/user/lab/from-json.nix:1:1:
+            1| builtins.fromJSON (builtins.readFile ./bad.json)
+             | ^
+            2|
+
+       … while decoding a JSON string
+
+       error: [json.exception.parse_error.101] parse error at line 3, column 1: syntax error while parsing object key - unexpected end of input; expected string literal
